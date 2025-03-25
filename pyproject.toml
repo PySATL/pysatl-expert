@@ -1,0 +1,94 @@
+[project]
+name = "pysatl-expert"
+version = "0.0.1-alpha"
+description = "PySATL expert system"
+authors = [
+    {name = "PySATL Team", email = "pysatl@yahoo.com"},
+]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "numpy>=1.25.1",
+    "scipy>=1.11.2",
+    "pandas>=2.2.1",
+    "typing-extensions>=4.12.2"
+]
+
+[project.urls]
+Homepage = "https://github.com/PySATL/pysatl-expert"
+Issues = "https://github.com/PySATL/pysatl-expert/issues"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "pysatl_expert"
+packages = [
+    { include = "pysatl_expert" },
+]
+package-mode = true
+
+[tool.poetry.group.dev.dependencies]
+markdown = "3.7"
+mkdocs = "1.6.1"
+mkdocs-material = "9.5.44"
+mdx-truly-sane-lists = "1.3"
+pymdown-extensions = "10.12"
+jinja2 = "3.1.4"
+mike = "2.1.3"
+isort = "5.13.2"
+coveralls = "4.0.1"
+pytest = "8.3.3"
+pytest-cov = "6.0.0"
+pytest-random-order = "1.1.1"
+ruff = "0.7.4"
+pytest-mock = "3.14.0"
+pre-commit = "4.0.1"
+mypy = "1.15.0"
+
+[tool.isort]
+line_length = 100
+profile = "black"
+# multi_line_output=3
+lines_after_imports=2
+skip_glob = ["**/.env*", "**/env/*", "**/.venv/*", "**/docs/*", "**/user_data/*"]
+
+[tool.ruff]
+line-length = 100
+extend-exclude = [".env", ".venv"]
+
+[tool.ruff.lint]
+extend-select = [
+  "C90", "B", "F", "E", "W", "UP", "I", "A", "TID", "YTT", "S", "PTH", "ASYNC", "NPY"
+]
+extend-ignore = [
+  "E241", "E272", "E221", "B007", "B904", "S603", "S607", "S608", "NPY002"
+]
+
+[tool.mypy]
+ignore_missing_imports = true
+namespace_packages = false
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+ignore_errors = true
+
+[tool.ruff.lint.mccabe]
+max-complexity = 12
+
+[tool.ruff.lint.isort]
+lines-after-imports = 2
+
+[tool.flake8]
+ignore = ["E121", "E123", "E126", "E24", "E203", "E704", "W503", "W504"]
+max-line-length = 100
+max-complexity = 12
+exclude = [".git", "__pycache__", ".eggs", "user_data", ".venv", ".env"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+  "S101", "S104", "S311", "S105", "S106", "S110"
+]

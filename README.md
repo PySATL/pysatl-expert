@@ -1,2 +1,2 @@
-# pysatl-expert
+# PySATL Expert
 PySATL expert system

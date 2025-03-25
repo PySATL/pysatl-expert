@@ -1,0 +1,141 @@
+name: PySATL CI
+
+on:
+  push:
+    branches:
+      - main
+  release:
+    types: [ published ]
+  pull_request:
+
+jobs:
+  build-linux:
+
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [ "3.10", "3.11", "3.12" ]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Poetry
+        run: pip install poetry==2.1.1
+
+      - name: Display Python version
+        run: python -c "import sys; print(sys.version)"
+
+      - name: Install dependencies with Poetry
+        run: poetry install --with dev
+
+      - name: Run Ruff lint
+        run: poetry run ruff check --output-format=github
+
+      - name: Check formatting with Ruff
+        run: poetry run ruff format --check
+
+      - name: Mypy
+        run: |
+          poetry run mypy pysatl_expert tests
+
+      - name: Run tests
+        run: poetry run pytest --random-order
+
+      - name: Tests with Coveralls
+        if: (runner.os == 'Linux' && matrix.python-version == '3.12')
+        run: |
+          poetry run pytest --random-order --cov=pysatl_expert --cov-config=.coveragerc
+
+      - name: Coveralls
+        if: (runner.os == 'Linux' && matrix.python-version == '3.12')
+        env:
+          COVERALLS_REPO_TOKEN: ${{ secrets.coverallsToken }}
+        run: |
+          # Allow failure for coveralls
+          coveralls || true
+
+      - name: Remove poetry.lock before checking for changes
+        run: rm -f poetry.lock
+
+      - name: Check for repository changes
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Repository is dirty, changes detected:"
+            git status
+            git diff
+            exit 1
+          else
+            echo "Repository is clean, no changes detected."
+          fi
+
+  pre-commit:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: pre-commit/action@v3.0.1
+
+  build:
+    name: "Build"
+    needs: [ build-linux, pre-commit ]
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build distribution
+        run: |
+          pip install poetry==2.1.1
+          poetry build
+
+      - name: Upload artifacts 📦
+        uses: actions/upload-artifact@v4
+        with:
+          name: pysatl-expert-build
+          path: |
+            dist
+          retention-days: 10
+
+  deploy-pypi:
+    name: "Publish Python 🐍 distribution 📦 to PyPI"
+    needs: [ build ]
+    runs-on: ubuntu-22.04
+    if: (github.event_name == 'release')
+    environment:
+      name: pypi
+      url: https://pypi.org/p/pysatl-expert
+    permissions:
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Download artifact  📦
+        uses: actions/download-artifact@v4
+        with:
+          pattern: pysatl*-build
+          path: dist
+          merge-multiple: true
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@v1.12.4
