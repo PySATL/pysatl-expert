@@ -1,34 +1,21 @@
-[project]
+[tool.poetry]
 name = "pysatl-expert"
 version = "0.0.1-alpha"
 description = "PySATL expert system"
-authors = [
-    {name = "PySATL Team", email = "pysatl@yahoo.com"},
-]
-license = {text = "MIT"}
+authors = ["PySATL Team <pysatl@yahoo.com>"]
+license = "MIT"
 readme = "README.md"
-requires-python = ">=3.10,<3.13"
-dependencies = [
-    "numpy>=1.25.1",
-    "scipy>=1.11.2",
-    "pandas>=2.2.1",
-    "typing-extensions>=4.12.2"
-]
+homepage = "https://github.com/PySATL/pysatl-expert"
+repository = "https://github.com/PySATL/pysatl-expert"
+packages = [{include = "pysatl_expert"}]
 
-[project.urls]
-Homepage = "https://github.com/PySATL/pysatl-expert"
-Issues = "https://github.com/PySATL/pysatl-expert/issues"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
-
-[tool.poetry]
-name = "pysatl_expert"
-packages = [
-    { include = "pysatl_expert" },
-]
-package-mode = true
+[tool.poetry.dependencies]
+python = ">=3.10,<3.13"
+numpy = ">=1.25.1"
+scipy = ">=1.11.2"
+pandas = ">=2.2.1"
+typing-extensions = ">=4.12.2"
+pysatl-criterion = { git = "https://github.com/PySATL/pysatl-criterion.git", branch = "main" }
 
 [tool.poetry.group.dev.dependencies]
 markdown = "3.7"
@@ -48,11 +35,14 @@ pytest-mock = "3.14.0"
 pre-commit = "4.0.1"
 mypy = "1.15.0"
 
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
 [tool.isort]
 line_length = 100
 profile = "black"
-# multi_line_output=3
-lines_after_imports=2
+lines_after_imports = 2
 skip_glob = ["**/.env*", "**/env/*", "**/.venv/*", "**/docs/*", "**/user_data/*"]
 
 [tool.ruff]
@@ -81,12 +71,6 @@ max-complexity = 12
 
 [tool.ruff.lint.isort]
 lines-after-imports = 2
-
-[tool.flake8]
-ignore = ["E121", "E123", "E126", "E24", "E203", "E704", "W503", "W504"]
-max-line-length = 100
-max-complexity = 12
-exclude = [".git", "__pycache__", ".eggs", "user_data", ".venv", ".env"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [
