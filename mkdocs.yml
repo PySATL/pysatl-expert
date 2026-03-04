@@ -11,7 +11,8 @@ nav:
         - Distributions: reference/distributions.md
         - Models: reference/models.md
         - Strategy: reference/strategy.md
-        - criteria: reference/criteria.md
+        - Criteria: reference/criteria.md
+        - Main: reference/main.md
 theme:
   name: material
   logo: "images/logo.jpeg"
@@ -27,7 +28,6 @@ theme:
     - navigation.sections
     - navigation.expand
     - toc.follow
-    - content.code.copy
   palette:
     - scheme: default
       primary: "blue grey"
