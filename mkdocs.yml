@@ -1,11 +1,17 @@
 site_name: PySATL
-site_url: !ENV [READTHEDOCS_CANONICAL_URL, 'https://pysatl.github.io/pysatl-criterion/en/']
+site_url: https://pysatl.github.io/pysatl-expert/
 site_description: PySATL is a free and open source statistics lib written in Python, designed to support all major researcher demands
-repo_url: https://github.com/PySATL/pysatl-criterion
+repo_url: https://github.com/PySATL/pysatl-expert
 edit_uri: edit/main/docs/
 use_directory_urls: True
 nav:
     - Home: index.md
+    - API Reference:
+        - Core: reference/core.md
+        - Distributions: reference/distributions.md
+        - Models: reference/models.md
+        - Strategy: reference/strategy.md
+        - criteria: reference/criteria.md
 theme:
   name: material
   logo: "images/logo.jpeg"
@@ -17,6 +23,11 @@ theme:
     - content.code.copy
     - navigation.top
     - navigation.footer
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - toc.follow
+    - content.code.copy
   palette:
     - scheme: default
       primary: "blue grey"
@@ -52,7 +63,8 @@ markdown_extensions:
   - pymdownx.pathconverter
   - pymdownx.smartsymbols
   - pymdownx.snippets:
-      base_path: docs
+      base_path:
+        - "."
       check_paths: true
   - pymdownx.superfences
   - pymdownx.tabbed:
@@ -71,3 +83,12 @@ plugins:
   - mike:
       deploy_prefix: 'en'
       canonical_version: 'stable'
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: true
+            show_root_heading: true
+            show_category_heading: true
+            merge_init_into_class: true
+            docstring_section_style: table

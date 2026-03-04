@@ -1,1 +1,1 @@
-# PySATL Criterion
+--8<-- "README.md"
