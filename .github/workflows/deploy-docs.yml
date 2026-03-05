@@ -43,7 +43,7 @@ jobs:
       - name: Build and push Mike
         if: ${{ github.event_name == 'push' }}
         run: |
-          mike deploy ${{ github.ref_name }} latest --push --update-aliases
+          mike deploy test latest --push --update-aliases
 
       - name: Build and push Mike - Release
         if: ${{ github.event_name == 'release' }}
