@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+         <loc>https://pysatl-expert.readthedocs.io/en/latest/stable/</loc>
+         <lastmod>2026-03-05</lastmod>
+    </url>
+    <url>
+         <loc>https://pysatl-expert.readthedocs.io/en/latest/stable/reference/core/</loc>
+         <lastmod>2026-03-05</lastmod>
+    </url>
+    <url>
+         <loc>https://pysatl-expert.readthedocs.io/en/latest/stable/reference/criteria/</loc>
+         <lastmod>2026-03-05</lastmod>
+    </url>
+    <url>
+         <loc>https://pysatl-expert.readthedocs.io/en/latest/stable/reference/distributions/</loc>
+         <lastmod>2026-03-05</lastmod>
+    </url>
+    <url>
+         <loc>https://pysatl-expert.readthedocs.io/en/latest/stable/reference/main/</loc>
+         <lastmod>2026-03-05</lastmod>
+    </url>
+    <url>
+         <loc>https://pysatl-expert.readthedocs.io/en/latest/stable/reference/models/</loc>
+         <lastmod>2026-03-05</lastmod>
+    </url>
+    <url>
+         <loc>https://pysatl-expert.readthedocs.io/en/latest/stable/reference/strategy/</loc>
+         <lastmod>2026-03-05</lastmod>
+    </url>
+</urlset>
