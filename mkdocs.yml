@@ -1,5 +1,5 @@
 site_name: PySATL
-site_url: https://pysatl.github.io/pysatl-expert/
+site_url: https://pysatl-expert.readthedocs.io/en/latest/
 site_description: PySATL is a free and open source statistics lib written in Python, designed to support all major researcher demands
 repo_url: https://github.com/PySATL/pysatl-expert
 edit_uri: edit/main/docs/
