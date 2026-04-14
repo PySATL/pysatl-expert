@@ -1,74 +1,62 @@
+from pysatl_criterion.util.distribution import DistributionType
+from pysatl_criterion.util.statistic import get_available_criteria
+
+
 class FeatureVector:
     """
-    Data Transfer Object (DTO) that standardizes the feature space for decision strategies.
+    Data Transfer Object  defining the feature space for ML classifiers.
 
-    This class aggregates disparate data points—intrinsic sample statistics and
-    multi-distribution goodness-of-fit scores—into a unified structure. Its primary
-    purpose is to provide a consistent numerical representation of the statistical
-    evidence, suitable for both heuristic analysis and machine learning inference.
+    Aggregates disparate statistical evidence into a high-dimensional,
+    fixed-length numerical array.
 
-    Attributes:
-        STAT_KEYS (list): Standardized set of sample-profiling keys.
-        CRITERIA_KEYS (list): Predefined sequence of statistical criteria to
-            maintain a fixed-length feature vector.
+    The vector is composed of:
+    1. Sample Statistics: Fundamental shape and complexity metrics (skew, entropy).
+    2. GoF Scores: Results from a dynamic array of criteria defined by the
+       global CRITERIA_SCHEMA.
+
+    If a test is mathematically inapplicable or fails, its position in the
+    vector is preserved and filled with a 'missing_value' (-1.0), serving
+    as a categorical indicator for the decision tree nodes.
     """
 
     STAT_KEYS = ["sample_size", "skew", "kurtosis", "coef_of_variation", "relative_iqr", "entropy"]
-    CRITERIA_KEYS = [
-        "shapiro_wilk",
-        "anderson_darling",
-        "ks_test",
-        "jarque_bera",
-        "lilliefors",
-        "cramer_von_mises",
-        "gini_index",
-        "moran_test",
-        "ahs_test",
-        "msf_test",
-        "tiku_singh",
-    ]
+
+    CRITERIA_SCHEMA = []
+    BLACKLIST = ["bhs", "kl_int", "kl_sup", "cq*", "rs", "ahs", "hp"]
+
+    for dist in DistributionType:
+        dist_name = dist.value.lower()
+        available_tests = get_available_criteria(dist)
+
+        for crit_code in available_tests:
+            clean_code = crit_code.lower()
+            if clean_code not in BLACKLIST:
+                CRITERIA_SCHEMA.append((dist_name, clean_code))
+
+    CRITERIA_SCHEMA = sorted(CRITERIA_SCHEMA)
 
     def __init__(self, sample_stats: dict, candidates_scores: dict):
-        """
-        Initializes the vector with filtered sample stats and candidate scores.
-
-        Args:
-            sample_stats (dict): Metadata describing the raw data sample.
-            candidates_scores (dict): Nested mapping of distribution names to
-                their respective criterion scores.
-        """
         self.sample_stats = {k: v for k, v in sample_stats.items() if k in self.STAT_KEYS}
-        self.candidates_scores = candidates_scores
+        self.candidates_scores = {
+            k.lower(): {ck.lower(): cv for ck, cv in v.items()}
+            for k, v in candidates_scores.items()
+        }
 
-    def as_flat_list(self) -> list[float]:
-        """
-        Transforms structured statistical data into a flattened numerical array.
-
-        This method ensures a deterministic order of features, which is critical for
-        predictive models. It iterates through fixed keys and sorted distribution
-        names to produce a stable input vector for ML classifiers.
-
-        Returns:
-            list[float]: A flat list of features representing the entire state
-                of the identification experiment.
-        """
+    def as_flat_list(self, missing_value: float = -1.0) -> list[float]:
         flat_vector = []
 
         for key in self.STAT_KEYS:
-            flat_vector.append(self.sample_stats.get(key, 0.0))
+            val = self.sample_stats.get(key, missing_value)
+            flat_vector.append(float(val))
 
-        sorted_dist_names = sorted(self.candidates_scores.keys())
-        for dist_name in sorted_dist_names:
-            dist_scores = self.candidates_scores[dist_name]
-
-            for crit_key in self.CRITERIA_KEYS:
-                val = dist_scores.get(crit_key, 0.0)
+        for dist_name, crit_key in self.CRITERIA_SCHEMA:
+            if dist_name in self.candidates_scores:
+                val = self.candidates_scores[dist_name].get(crit_key, missing_value)
                 flat_vector.append(float(val))
+            else:
+                flat_vector.append(float(missing_value))
 
         return flat_vector
 
     def as_dict(self) -> dict:
-        """
-        Returns a dictionary representation for logging or reporting purposes.
-        """
         return {"stats": self.sample_stats, "scores": self.candidates_scores}
