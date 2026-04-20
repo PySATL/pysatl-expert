@@ -1,5 +1,8 @@
 # PySATL Expert
 
+[![Pysatl_criterion CI](https://github.com/PySATL/pysatl-expert/workflows/PySATL%20CI/badge.svg)](https://github.com/PySATL/pysatl-expert/actions)
+[![Coverage Status](https://coveralls.io/repos/github/PySATL/pysatl-expert/badge.svg?branch=main)](https://coveralls.io/github/PySATL/pysatl-expert?branch=main)
+[![Documentation](https://readthedocs.org/projects/pysatl-expert/badge)](https://pysatl-expert.readthedocs.io)
 
 **Pysatl-expert** is experimental expert system designed for the automatic identification of the distribution law of a random variable.
 
