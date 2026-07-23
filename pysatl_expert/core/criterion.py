@@ -1,3 +1,5 @@
+"""Abstract Goodness-of-Fit criterion interface module."""
+
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -5,8 +7,7 @@ import numpy as np
 
 
 class AbstractCriterion(ABC):
-    """
-    Base interface for Goodness-of-Fit (GoF) statistical criteria.
+    """Base interface for Goodness-of-Fit (GoF) statistical criteria.
 
     Standardizes how the system calculates the discrepancy between an empirical
     sample and a theoretical distribution.
@@ -16,20 +17,21 @@ class AbstractCriterion(ABC):
     """
 
     def __init__(self, name: str):
-        """
-        Initializes the criterion with its identifying name.
+        """Initialize the criterion with its identifying name.
+
+        Args:
+            name (str): Unique name identifier for the statistical criterion.
         """
         self.name = name
 
     @abstractmethod
     def calculate(self, data: np.ndarray, dist: Any, params: dict) -> float:
-        """
-        Computes the fit score for a candidate distribution.
+        """Compute the fit score for a candidate distribution.
 
         Args:
-            data: Sorted numerical sample to evaluate.
-            dist: Candidate distribution object (implements CDF/PDF).
-            params: Parameters obtained from the distribution's fit() stage.
+            data (np.ndarray): Sorted numerical sample to evaluate.
+            dist (Any): Candidate distribution object implementing CDF/PDF.
+            params (dict): Estimated parameters returned by the distribution's fit() method.
 
         Returns:
             float: Calculated statistical score (e.g., distance or likelihood).
