@@ -3,36 +3,24 @@ import scipy.stats as stats
 
 
 class FeatureExtractor:
-    """
-    Service for calculating intrinsic statistical properties of a data sample.
+    """Service for calculating intrinsic statistical properties of a sample.
 
-    Computes a set of descriptive metrics used to build a profile of the input
-    data. These features characterize the shape and complexity of the sample,
-    independent of its scale, providing the necessary inputs for decision-making
-    strategies.
+    Computes descriptive metrics used to profile the shape and complexity of input data.
     """
 
     def __init__(self):
-        """
-        Initializes the feature extraction service.
-        """
+        """Initialize the feature extraction service."""
         pass
 
     def calculate_sample_stats(self, data: np.ndarray) -> dict:
-        """
-        Computes a dictionary of scale-invariant and robust sample statistics.
-
-        The extracted features include:
-        - Boundary values (min, max) for domain validation.
-        - Classical shape moments (skewness, kurtosis).
-        - Dispersion metrics (variation, relative IQR).
-        - Complexity measures (entropy).
+        """Compute scale-invariant and robust sample statistics.
 
         Args:
-            data (np.ndarray): The raw numerical sample to profile.
+            data (np.ndarray): Raw numerical sample array to profile.
 
         Returns:
-            dict: A collection of calculated features (floats and ints).
+            dict[str, float | int]: Calculated feature map including min, max, sample_size,
+                skew, kurtosis, coef_of_variation, relative_iqr, and entropy.
         """
         data_min = np.min(data)
         data_max = np.max(data)
