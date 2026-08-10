@@ -15,14 +15,14 @@ url = "https://test.pypi.org/simple/"
 priority = "explicit"
 
 [tool.poetry.dependencies]
-python = ">=3.11,<3.13"
+python = ">=3.10,<3.13"
 numpy = ">=1.25.1"
 scipy = ">=1.11.2"
 pandas = ">=2.2.1"
 typing-extensions = ">=4.12.2"
 pysatl-criterion = { version = "*", source = "testpypi" }
 tqdm = "^4.67.3"
-scikit-learn = "^1.8.0"
+scikit-learn = ">=1.4.0,<1.7.0"
 
 [tool.poetry.group.dev.dependencies]
 markdown = "3.7"
