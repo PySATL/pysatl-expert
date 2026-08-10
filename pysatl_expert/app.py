@@ -1,10 +1,4 @@
-import sys
 from pathlib import Path
-
-
-expert_root = str(Path(__file__).parents[1])
-if expert_root not in sys.path:
-    sys.path.insert(0, expert_root)
 
 import scipy.stats as st
 
@@ -24,7 +18,9 @@ from pysatl_expert.pipeline import DistributionPipeline
 from pysatl_expert.strategy.ml_strategy import MLStrategy
 
 
-def evaluate_sample(data, model_path=None, db_path=None, save_plot=True, plot_path="distribution_report.png"):
+def evaluate_sample(
+    data, model_path=None, db_path=None, save_plot=True, plot_path="distribution_report.png"
+):
     """Evaluate empirical sample data and print/save visual identification report.
 
     Args:

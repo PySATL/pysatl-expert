@@ -1,13 +1,10 @@
+"""Multiprocessed dataset generator script for pysatl-expert."""
+
 import logging
 import multiprocessing as mp
 import os
-import sys
 import time
 from pathlib import Path
-
-repo_root = str(Path(__file__).parents[1])
-if repo_root not in sys.path:
-    sys.path.insert(0, repo_root)
 
 import numpy as np
 import pandas as pd
@@ -31,6 +28,8 @@ from pysatl_expert.strategy.ml_strategy import MLStrategy
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
+
+repo_root = Path(__file__).parents[1]
 
 _pipeline = None
 _strategy = None
@@ -57,9 +56,7 @@ def _init_worker(db_path: str):
         from sklearn.ensemble import RandomForestClassifier
 
         rf = RandomForestClassifier(n_estimators=2, random_state=42)
-        X_dummy = np.zeros(
-            (8, len(FeatureVector.STAT_KEYS) + len(FeatureVector.CRITERIA_SCHEMA))
-        )
+        X_dummy = np.zeros((8, len(FeatureVector.STAT_KEYS) + len(FeatureVector.CRITERIA_SCHEMA)))
         y_dummy = np.array(
             [
                 "Normal",
@@ -144,6 +141,8 @@ def generate_single_sample(dist_name: str) -> tuple[np.ndarray, str]:
 def _process_item(dist_name: str) -> list[float | str] | None:
     """Worker task: Generate, evaluate and binarize a sample vector."""
     try:
+        if _pipeline is None or _strategy is None:
+            return None
         sample, target_label = generate_single_sample(dist_name)
         base_fv, _ = _pipeline._evaluate_sample(sample)
         sample_size = int(base_fv.sample_stats.get("sample_size", len(sample)))
@@ -198,8 +197,10 @@ def main():
             if done_count % 1000 == 0 or done_count == total_samples:
                 elapsed = time.time() - t0
                 speed = done_count / elapsed if elapsed > 0 else 0
+                pct = done_count / total_samples * 100
                 logger.info(
-                    f"Progress: {done_count}/{total_samples} samples ({done_count/total_samples*100:.1f}%) | Speed: {speed:.1f} samples/sec"
+                    f"Progress: {done_count}/{total_samples} samples ({pct:.1f}%) | "
+                    f"Speed: {speed:.1f} samples/sec"
                 )
 
     elapsed_total = time.time() - t0

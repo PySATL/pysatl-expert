@@ -43,17 +43,17 @@ def _build_criteria_registry() -> dict[str, list[type]]:
             logger.warning(f"Could not load criteria codes for {dist_name}: {e}")
             continue
 
-        def walk_subclasses(cls):
+        def walk_subclasses(cls, codes=available_codes):
             res = []
             for sub in cls.__subclasses__():
                 try:
                     if hasattr(sub, "short_code"):
                         code = sub.short_code()
-                        if code in available_codes and code.lower() not in FeatureVector.BLACKLIST:
+                        if code in codes and code.lower() not in FeatureVector.BLACKLIST:
                             res.append(sub)
-                except Exception:
-                    pass
-                res.extend(walk_subclasses(sub))
+                except Exception as exc:
+                    logger.debug(f"Error checking subclass {sub}: {exc}")
+                res.extend(walk_subclasses(sub, codes=codes))
             return res
 
         valid_classes = walk_subclasses(base_cls)
@@ -77,7 +77,7 @@ class DynamicCriterionSelector(AbstractCriterionSelector):
         """Initialize selector with optional custom criteria registry."""
         super().__init__()
         self.registry = registry if registry is not None else CRITERIA_REGISTRY
-        self._cache = {}
+        self._cache: dict[str, list[GenericCriterion]] = {}
 
     def get_applicable_criteria(self, data, distribution) -> list[GenericCriterion]:
         """Retrieve applicable criteria for a given candidate distribution model."""
@@ -91,7 +91,10 @@ class DynamicCriterionSelector(AbstractCriterionSelector):
         for stat_cls in stat_classes:
             try:
                 instance = stat_cls()
-                criterion_name = stat_cls.short_code().lower()
+                short_code_fn = getattr(stat_cls, "short_code", None)
+                criterion_name = (
+                    short_code_fn().lower() if short_code_fn else stat_cls.__name__.lower()
+                )
                 criterion = GenericCriterion(instance, display_name=criterion_name)
                 criteria.append(criterion)
             except Exception as e:

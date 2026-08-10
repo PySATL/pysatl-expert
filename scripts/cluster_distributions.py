@@ -1,11 +1,8 @@
+"""Hierarchical Clustering Script for Distribution Families in pysatl-expert."""
+
 import json
 import logging
-import sys
 from pathlib import Path
-
-repo_root = str(Path(__file__).parents[1])
-if repo_root not in sys.path:
-    sys.path.insert(0, repo_root)
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -19,11 +16,12 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    """Execute agglomerative clustering to discover distribution families and export JSON configuration."""
-    expert_dir = Path(repo_root) / "pysatl_expert"
+    """Execute agglomerative clustering to discover distribution families."""
+    repo_root = Path(__file__).parents[1]
+    expert_dir = repo_root / "pysatl_expert"
     csv_path = expert_dir / "expert_ml_dataset_binary.csv"
-    dendrogram_path = Path(repo_root) / "distribution_families_dendrogram.png"
-    clustermap_path = Path(repo_root) / "distribution_clustermap.png"
+    dendrogram_path = repo_root / "distribution_families_dendrogram.png"
+    clustermap_path = repo_root / "distribution_clustermap.png"
     json_path = expert_dir / "distribution_families.json"
 
     logger.info(f"Loading dataset for clustering: {csv_path}")
@@ -44,12 +42,15 @@ def main():
     profiles = df_clean.groupby(target_col)[feature_cols].mean()
     dist_names = profiles.index.tolist()
 
-    logger.info(f"Computed profile vectors for {len(dist_names)} distributions across {len(feature_cols)} features.")
+    msg = f"Computed profiles for {len(dist_names)} distributions ({len(feature_cols)} features)."
+    logger.info(msg)
 
     Z = linkage(profiles.values, method="ward", metric="euclidean")
 
     plt.figure(figsize=(10, 6), dpi=300)
-    plt.style.use("seaborn-v0_8-whitegrid" if "seaborn-v0_8-whitegrid" in plt.style.available else "default")
+    plt.style.use(
+        "seaborn-v0_8-whitegrid" if "seaborn-v0_8-whitegrid" in plt.style.available else "default"
+    )
 
     dendrogram(
         Z,
@@ -59,7 +60,12 @@ def main():
         color_threshold=0.7 * max(Z[:, 2]),
     )
 
-    plt.title("Hierarchical Dendrogram of Probability Distribution Families", fontsize=14, fontweight="bold", pad=15)
+    plt.title(
+        "Hierarchical Dendrogram of Probability Distribution Families",
+        fontsize=14,
+        fontweight="bold",
+        pad=15,
+    )
     plt.xlabel("Distribution Classes", fontsize=12, labelpad=10)
     plt.ylabel("Ward Distance", fontsize=12, labelpad=10)
     plt.tight_layout()
@@ -76,7 +82,9 @@ def main():
         yticklabels=True,
         xticklabels=False,
     )
-    cg.fig.suptitle("Clustermap of Distribution Criteria Profiles", fontsize=14, fontweight="bold", y=1.02)
+    cg.fig.suptitle(
+        "Clustermap of Distribution Criteria Profiles", fontsize=14, fontweight="bold", y=1.02
+    )
     cg.savefig(clustermap_path, dpi=300)
     plt.close()
     logger.info(f"Clustermap saved to: '{clustermap_path}'")
@@ -94,7 +102,7 @@ def main():
 
     logger.info(f"Discovered Distribution Families: {formatted_families}")
 
-    with open(json_path, "w", encoding="utf-8") as f:
+    with json_path.open("w", encoding="utf-8") as f:
         json.dump(formatted_families, f, indent=2, ensure_ascii=False)
 
     logger.info(f"Family mapping configuration saved to: '{json_path}'")

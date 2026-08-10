@@ -12,16 +12,18 @@ from pysatl_expert.models.report import Report
 logger = logging.getLogger(__name__)
 
 sns.set_theme(style="whitegrid", palette="muted")
-plt.rcParams.update({
-    "font.family": "sans-serif",
-    "font.size": 10,
-    "axes.labelsize": 11,
-    "axes.titlesize": 12,
-    "xtick.labelsize": 9,
-    "ytick.labelsize": 9,
-    "legend.fontsize": 9,
-    "figure.titlesize": 14,
-})
+plt.rcParams.update(
+    {
+        "font.family": "sans-serif",
+        "font.size": 10,
+        "axes.labelsize": 11,
+        "axes.titlesize": 12,
+        "xtick.labelsize": 9,
+        "ytick.labelsize": 9,
+        "legend.fontsize": 9,
+        "figure.titlesize": 14,
+    }
+)
 
 
 def _get_scipy_dist(dist_name: str, params: dict):
@@ -104,7 +106,10 @@ def generate_text_report(data: np.ndarray, report: Report) -> str:
     lines.append(f"  • ML Expert Confidence: {report.confidence * 100:.2f}%")
 
     if report.parameters:
-        param_str = ", ".join(f"{k} = {v:.4f}" if isinstance(v, (float, int)) else f"{k} = {v}" for k, v in report.parameters.items())
+        param_str = ", ".join(
+            f"{k} = {v:.4f}" if isinstance(v, (float, int)) else f"{k} = {v}"
+            for k, v in report.parameters.items()
+        )
         lines.append(f"  • Estimated Parameters: {param_str}")
     lines.append("-" * 80)
 
@@ -127,14 +132,24 @@ def generate_text_report(data: np.ndarray, report: Report) -> str:
             failed_crit = [k for k, v in winner_scores.items() if v == 0.0 or v is False]
             total_crit = len(winner_scores)
         else:
-            passed_crit = [k for k, v in report.all_scores.items() if isinstance(v, (int, float, bool)) and v == 1.0]
-            failed_crit = [k for k, v in report.all_scores.items() if isinstance(v, (int, float, bool)) and v == 0.0]
+            passed_crit = [
+                k
+                for k, v in report.all_scores.items()
+                if isinstance(v, (int, float, bool)) and v == 1.0
+            ]
+            failed_crit = [
+                k
+                for k, v in report.all_scores.items()
+                if isinstance(v, (int, float, bool)) and v == 0.0
+            ]
             total_crit = len(report.all_scores)
 
         if total_crit > 0:
             lines.append("💡 Goodness-of-Fit (GoF) Criteria Evaluation for Winner:")
             lines.append(f"  • Total Criteria Evaluated: {total_crit}")
-            lines.append(f"  • Passed Criteria (H0 Accepted at α=0.05): {len(passed_crit)} / {total_crit}")
+            lines.append(
+                f"  • Passed Criteria (H0 Accepted at α=0.05): {len(passed_crit)} / {total_crit}"
+            )
             if passed_crit:
                 top_passed = ", ".join(passed_crit[:10])
                 if len(passed_crit) > 10:
@@ -158,12 +173,11 @@ def generate_plot_report(
     """Generate a high-resolution 4-panel visualization chart."""
     output_path = Path(output_path)
     fig, axes = plt.subplots(2, 2, figsize=(13, 9), dpi=300)
-    fig.suptitle(
-        f"pysatl-expert Identification: {report.distribution_name} (Confidence: {report.confidence * 100:.1f}%)",
-        fontsize=15,
-        fontweight="bold",
-        y=0.98,
+    title_str = (
+        f"pysatl-expert Identification: {report.distribution_name} "
+        f"(Confidence: {report.confidence * 100:.1f}%)"
     )
+    fig.suptitle(title_str, fontsize=15, fontweight="bold", y=0.98)
 
     data_sorted = np.sort(data)
     scipy_dist = _get_scipy_dist(report.distribution_name, report.parameters or {})
@@ -187,8 +201,8 @@ def generate_plot_report(
         try:
             pdf_vals = scipy_dist.pdf(x_grid)
             ax1.plot(x_grid, pdf_vals, "r-", lw=2.5, label=f"Fitted {report.distribution_name} PDF")
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug(f"Could not compute PDF for plot: {exc}")
     ax1.set_xlabel("Value (x)")
     ax1.set_ylabel("Probability Density")
     ax1.legend(loc="best")
@@ -202,9 +216,15 @@ def generate_plot_report(
     if scipy_dist is not None:
         try:
             cdf_vals = scipy_dist.cdf(data_sorted)
-            ax2.plot(data_sorted, cdf_vals, "r--", lw=2, label=f"Theoretical {report.distribution_name} CDF")
-        except Exception:
-            pass
+            ax2.plot(
+                data_sorted,
+                cdf_vals,
+                "r--",
+                lw=2,
+                label=f"Theoretical {report.distribution_name} CDF",
+            )
+        except Exception as exc:
+            logger.debug(f"Could not compute CDF for plot: {exc}")
     ax2.set_xlabel("Value (x)")
     ax2.set_ylabel("Cumulative Probability")
     ax2.legend(loc="best")
@@ -215,14 +235,30 @@ def generate_plot_report(
     if scipy_dist is not None:
         try:
             (osm, osr), (slope, intercept, r) = stats.probplot(data, dist=scipy_dist, plot=None)
-            ax3.scatter(osm, osr, color="#2ecc71", alpha=0.7, edgecolors="none", s=25, label="Sample Quantiles")
+            ax3.scatter(
+                osm,
+                osr,
+                color="#2ecc71",
+                alpha=0.7,
+                edgecolors="none",
+                s=25,
+                label="Sample Quantiles",
+            )
             line_x = np.array([np.min(osm), np.max(osm)])
-            ax3.plot(line_x, slope * line_x + intercept, "r--", lw=2, label=f"Reference Line ($R^2={r**2:.3f}$)")
+            ax3.plot(
+                line_x,
+                slope * line_x + intercept,
+                "r--",
+                lw=2,
+                label=f"Reference Line ($R^2={r**2:.3f}$)",
+            )
             ax3.set_xlabel("Theoretical Quantiles")
             ax3.set_ylabel("Sample Quantiles")
             ax3.legend(loc="best")
         except Exception:
-            ax3.text(0.5, 0.5, "Q-Q Plot unavailable for this parameterization", ha="center", va="center")
+            ax3.text(
+                0.5, 0.5, "Q-Q Plot unavailable for this parameterization", ha="center", va="center"
+            )
     else:
         ax3.text(0.5, 0.5, "Q-Q Plot unavailable", ha="center", va="center")
 
@@ -242,7 +278,13 @@ def generate_plot_report(
 
         for bar in bars:
             width = bar.get_width()
-            ax4.text(width + 1.5, bar.get_y() + bar.get_height() / 2, f"{width:.1f}%", va="center", fontsize=9)
+            ax4.text(
+                width + 1.5,
+                bar.get_y() + bar.get_height() / 2,
+                f"{width:.1f}%",
+                va="center",
+                fontsize=9,
+            )
 
     plt.tight_layout(rect=[0, 0, 1, 0.96])
     fig.savefig(output_path, dpi=300)

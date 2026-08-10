@@ -1,12 +1,8 @@
+"""Training script for 2-stage Hierarchical Expert Model."""
+
 import json
 import logging
-import sys
 from pathlib import Path
-
-
-repo_root = str(Path(__file__).parents[1])
-if repo_root not in sys.path:
-    sys.path.insert(0, repo_root)
 
 import joblib
 import numpy as np
@@ -23,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 def main():
     """Train HierarchicalExpertModel and evaluate accuracy on test split."""
-    expert_dir = Path(repo_root) / "pysatl_expert"
+    expert_dir = Path(__file__).parents[1] / "pysatl_expert"
     csv_path = expert_dir / "expert_ml_dataset_binary.csv"
     json_path = expert_dir / "distribution_families.json"
     model_path = expert_dir / "rf_expert_model.joblib"
@@ -31,7 +27,7 @@ def main():
     logger.info(f"Loading dataset from: {csv_path}")
     logger.info(f"Loading family mapping from: {json_path}")
 
-    with open(json_path, encoding="utf-8") as f:
+    with json_path.open(encoding="utf-8") as f:
         family_map = json.load(f)
 
     df = pd.read_csv(csv_path)

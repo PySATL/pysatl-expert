@@ -50,9 +50,9 @@ def test_feature_vector_as_flat_list_order(mock_data):
     fv = FeatureVector(stats, scores)
     flat = fv.as_flat_list()
 
-    assert flat[0] == 0.0   # min
+    assert flat[0] == 0.0  # min
     assert flat[1] == 10.0  # max
-    assert flat[2] == 100.0 # sample_size
+    assert flat[2] == 100.0  # sample_size
 
 
 def test_feature_vector_as_flat_list_missing_values():

@@ -165,7 +165,7 @@ class MLStrategy(AbstractStrategy):
         _class_names: Ordered list of distribution class names expected by the model.
     """
 
-    def __init__(self, model_path: str, cv_database_path: str):
+    def __init__(self, model_path: str | Path, cv_database_path: str | Path):
         """Initialize the ML strategy with a trained model and critical value database.
 
         Args:
@@ -176,12 +176,12 @@ class MLStrategy(AbstractStrategy):
             FileNotFoundError: If either file does not exist.
             Exception: If model loading fails.
         """
-        model_path = Path(model_path)
-        if not model_path.exists():
-            raise FileNotFoundError(f"Model file not found: {model_path}")
+        p_model = Path(model_path)
+        if not p_model.exists():
+            raise FileNotFoundError(f"Model file not found: {p_model}")
 
         try:
-            self.model = load_model(model_path)
+            self.model = load_model(p_model)
             logger.info(f"Loaded Random Forest model from {model_path}")
         except Exception as e:
             logger.error(f"Failed to load model: {e}")
@@ -190,7 +190,7 @@ class MLStrategy(AbstractStrategy):
         self._class_names = sorted(self.model.classes_.tolist())
         logger.info(f"Model classes: {self._class_names}")
 
-        self.cv_cache = CVCache(cv_database_path)
+        self.cv_cache = CVCache(str(cv_database_path))
 
     def _binarize_vector(self, raw_flat_vector: List[float], sample_size: int) -> np.ndarray:
         """Binarize raw continuous GoF test results using critical values.

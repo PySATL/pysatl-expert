@@ -18,12 +18,12 @@ class HierarchicalExpertModel:
             for d in dists:
                 self.dist_to_family[d] = fam_name
 
-        self.feature_names = None
-        self.stage1_model = None
-        self.stage1_features = None
+        self.feature_names: list[str] | None = None
+        self.stage1_model: RandomForestClassifier | None = None
+        self.stage1_features: list[str] | None = None
 
-        self.stage2_models = {}
-        self.stage2_features = {}
+        self.stage2_models: dict[str, RandomForestClassifier] = {}
+        self.stage2_features: dict[str, list[str]] = {}
 
     @property
     def classes_(self) -> np.ndarray:
@@ -50,14 +50,18 @@ class HierarchicalExpertModel:
 
         # --- Stage 1: Family Model ---
         if n_stage1 is not None and n_stage1 < len(X_df.columns):
-            rf_stage1 = RandomForestClassifier(n_estimators=200, max_depth=15, random_state=42, n_jobs=2)
+            rf_stage1 = RandomForestClassifier(
+                n_estimators=200, max_depth=15, random_state=42, n_jobs=2
+            )
             rf_stage1.fit(X_df, y_families)
             importances1 = pd.Series(rf_stage1.feature_importances_, index=X_df.columns)
             self.stage1_features = importances1.nlargest(n_stage1).index.tolist()
         else:
             self.stage1_features = self.feature_names
 
-        self.stage1_model = RandomForestClassifier(n_estimators=200, max_depth=12, random_state=42, n_jobs=2)
+        self.stage1_model = RandomForestClassifier(
+            n_estimators=200, max_depth=12, random_state=42, n_jobs=2
+        )
         self.stage1_model.fit(X_df[self.stage1_features], y_families)
 
         # --- Stage 2: Sub-Family Models ---
@@ -70,14 +74,18 @@ class HierarchicalExpertModel:
                 continue
 
             if n_stage2 is not None and n_stage2 < len(X_fam.columns):
-                rf_fam = RandomForestClassifier(n_estimators=200, max_depth=15, random_state=42, n_jobs=2)
+                rf_fam = RandomForestClassifier(
+                    n_estimators=200, max_depth=15, random_state=42, n_jobs=2
+                )
                 rf_fam.fit(X_fam, y_fam)
                 importances2 = pd.Series(rf_fam.feature_importances_, index=X_fam.columns)
                 top_fam_features = importances2.nlargest(n_stage2).index.tolist()
             else:
                 top_fam_features = X_fam.columns.tolist()
 
-            fam_model = RandomForestClassifier(n_estimators=200, max_depth=12, random_state=42, n_jobs=2)
+            fam_model = RandomForestClassifier(
+                n_estimators=200, max_depth=12, random_state=42, n_jobs=2
+            )
             fam_model.fit(X_fam[top_fam_features], y_fam)
 
             self.stage2_models[fam_name] = fam_model
@@ -101,6 +109,9 @@ class HierarchicalExpertModel:
         n_classes = len(classes)
 
         proba_matrix = np.zeros((n_samples, n_classes), dtype=float)
+
+        if self.stage1_model is None or self.stage1_features is None:
+            raise RuntimeError("Model must be fitted before calling predict_proba")
 
         X_s1 = X_df[self.stage1_features]
         fam_probs = self.stage1_model.predict_proba(X_s1)
