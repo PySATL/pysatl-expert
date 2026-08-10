@@ -11,16 +11,31 @@ logger = logging.getLogger(__name__)
 
 
 class DistributionPipeline:
-    """
-    Orchestrates the identification of the best-fitting distribution for a data sample.
+    """Orchestrates identification of the best-fitting distribution for empirical sample data.
+
+    Attributes:
+        components (PipelineComponents): Registry container of pluggable components.
     """
 
     def __init__(self, components: PipelineComponents):
+        """Initialize the pipeline with component registry.
+
+        Args:
+            components (PipelineComponents): Component registry instance.
+        """
         self.components = components
 
     def _pre_validate(self, data_min: float, data_max: float, distributions: list) -> list:
-        """
-        Filters distributions based on their mathematical domain (support).
+        """Filter candidate distributions based on theoretical domain support boundaries.
+
+        Args:
+            data_min (float): Minimum value observed in the sample.
+            data_max (float): Maximum value observed in the sample.
+            distributions (list[AbstractDistribution]): Collection of candidate distributions.
+
+        Returns:
+            list[AbstractDistribution]: Candidate models whose domain supports contain
+                the observed sample range [data_min, data_max].
         """
         valid_distributions = []
         for dist in distributions:
@@ -30,8 +45,13 @@ class DistributionPipeline:
         return valid_distributions
 
     def _evaluate_sample(self, data: np.ndarray) -> tuple[FeatureVector, dict[str, Any]]:
-        """
-        Internal method to process a single data sample.
+        """Process a single sample to extract sample statistics and GoF scores.
+
+        Args:
+            data (np.ndarray): 1D array of sample values.
+
+        Returns:
+            tuple[FeatureVector, dict[str, Any]]: FeatureVector and estimated parameters.
         """
         data = np.sort(data)
         sample_stats = self.components.feature_extractor.calculate_sample_stats(data)
