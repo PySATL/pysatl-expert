@@ -1,0 +1,16 @@
+{
+  "Family_1": [
+    "Normal",
+    "Student"
+  ],
+  "Family_2": [
+    "Exponential",
+    "Gamma",
+    "LogNormal",
+    "Weibull"
+  ],
+  "Family_3": [
+    "Beta",
+    "Uniform"
+  ]
+}
