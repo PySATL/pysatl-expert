@@ -2,27 +2,46 @@ import json
 
 
 class Report:
-    """
-    Data Object representing the final verdict of the identification process.
+    """Represents the final verdict and statistical breakdown of distribution identification.
 
     Attributes:
-        distribution_name (str): The name of the winning distribution.
-        confidence (float): Confidence level derived from bootstrap voting (0.0 to 1.0).
-        all_scores (dict): Raw Goodness-of-Fit scores for the original sample.
-        parameters (dict, optional): Fitted parameters of the winning distribution.
-        final_ranks (dict, optional): Voting results or penalty scores for all candidates.
+        distribution_name (str): Name of the identified winning distribution.
+        confidence (float): Confidence level score (0.0 to 1.0).
+        all_scores (dict): Raw GoF scores for all candidate distributions.
+        parameters (dict | None): Fitted parameters of the winning distribution.
+        final_ranks (dict | None): Voting or rank breakdown across candidate distributions.
     """
 
     def __init__(
-        self, distribution_name, confidence, all_scores, parameters=None, final_ranks=None
+        self,
+        distribution_name: str,
+        confidence: float,
+        all_scores: dict,
+        parameters: dict | None = None,
+        final_ranks: dict | None = None,
     ):
+        """Initialize the identification report.
+
+        Args:
+            distribution_name (str): Name of the winning distribution.
+            confidence (float): Calculated confidence level (0.0 to 1.0).
+            all_scores (dict): Map of all raw GoF criterion scores.
+            parameters (dict | None): Estimated parameter dictionary of the winner.
+            final_ranks (dict | None): Voting scores or ranks for all candidate models.
+        """
         self.distribution_name = distribution_name
         self.confidence = confidence
         self.all_scores = all_scores
         self.parameters = parameters
         self.final_ranks = final_ranks
 
-    def __str__(self):
+    def __str__(self) -> str:
+        """Return a human-readable text summary of the identification report.
+
+        Returns:
+            str: Formatted multi-line report string.
+        """
+
         def safe_serialize(obj):
             if hasattr(obj, "item"):
                 return obj.item()
@@ -42,5 +61,5 @@ class Report:
             f"Detailed Scores:\n{scores_str}\n"
         )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__str__()

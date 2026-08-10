@@ -1,28 +1,46 @@
-from pysatl_criterion.util.distribution import DistributionType
-from pysatl_criterion.util.statistic import get_available_criteria
+from pysatl_criterion.distribution.distribution_type import DistributionType
+from pysatl_criterion.utils.statistic import get_available_criteria
 
 
 class FeatureVector:
-    """
-    Data Transfer Object  defining the feature space for ML classifiers.
+    """Encapsulates statistical evidence for ML classifiers and decision strategies.
 
-    Aggregates disparate statistical evidence into a high-dimensional,
-    fixed-length numerical array.
+    Aggregates continuous sample statistics and GoF test results into a fixed-length vector.
 
-    The vector is composed of:
-    1. Sample Statistics: Fundamental shape and complexity metrics (skew, entropy).
-    2. GoF Scores: Results from a dynamic array of criteria defined by the
-       global CRITERIA_SCHEMA.
-
-    If a test is mathematically inapplicable or fails, its position in the
-    vector is preserved and filled with a 'missing_value' (-1.0), serving
-    as a categorical indicator for the decision tree nodes.
+    Attributes:
+        STAT_KEYS (list[str]): Key names of descriptive sample statistics.
+        CRITERIA_SCHEMA (list[tuple[str, str]]): Ordered list of (dist_name, test_code) tuples.
+        sample_stats (dict[str, float]): Map of calculated descriptive statistics.
+        candidates_scores (dict[str, dict[str, float]]): Map of GoF test scores per distribution.
     """
 
-    STAT_KEYS = ["sample_size", "skew", "kurtosis", "coef_of_variation", "relative_iqr", "entropy"]
+    STAT_KEYS = [
+        "min",
+        "max",
+        "sample_size",
+        "skew",
+        "kurtosis",
+        "coef_of_variation",
+        "relative_iqr",
+        "entropy",
+    ]
 
     CRITERIA_SCHEMA = []
-    BLACKLIST = ["bhs", "kl_int", "kl_sup", "cq*", "rs", "ahs", "hp"]
+    BLACKLIST = {
+        "bhs",
+        "kl_int",
+        "kl_sup",
+        "cq*",
+        "rs",
+        "ahs",
+        "hp",
+        "independencenumber",
+        "cliquenumber",
+        "avgdegree",
+        "edgesnumber",
+        "maxdegree",
+        "connectedcomponents",
+    }
 
     for dist in DistributionType:
         dist_name = dist.value.lower()
@@ -36,6 +54,12 @@ class FeatureVector:
     CRITERIA_SCHEMA = sorted(CRITERIA_SCHEMA)
 
     def __init__(self, sample_stats: dict, candidates_scores: dict):
+        """Initialize the FeatureVector with sample statistics and GoF scores.
+
+        Args:
+            sample_stats (dict): Dictionary of calculated descriptive sample statistics.
+            candidates_scores (dict): Dictionary of GoF criterion scores per distribution.
+        """
         self.sample_stats = {k: v for k, v in sample_stats.items() if k in self.STAT_KEYS}
         self.candidates_scores = {
             k.lower(): {ck.lower(): cv for ck, cv in v.items()}
@@ -43,6 +67,14 @@ class FeatureVector:
         }
 
     def as_flat_list(self, missing_value: float = -1.0) -> list[float]:
+        """Convert aggregated features into a 1D flat list for ML model input.
+
+        Args:
+            missing_value (float): Fallback value for missing/inapplicable tests. Defaults to -1.0.
+
+        Returns:
+            list[float]: Flat numerical vector matching the schema order.
+        """
         flat_vector = []
 
         for key in self.STAT_KEYS:
@@ -59,4 +91,9 @@ class FeatureVector:
         return flat_vector
 
     def as_dict(self) -> dict:
+        """Convert feature vector data into a structured dictionary.
+
+        Returns:
+            dict: Map with 'stats' and 'scores' nested dictionaries.
+        """
         return {"stats": self.sample_stats, "scores": self.candidates_scores}

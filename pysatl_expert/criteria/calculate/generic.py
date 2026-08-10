@@ -8,20 +8,14 @@ logger = logging.getLogger(__name__)
 
 
 class GenericCriterion(AbstractCriterion):
-    """
-    Adapter for integrating 'pysatl-criterion' engines into the expert system.
+    """Adapter for integrating 'pysatl-criterion' engines into the expert system.
 
-    This class decouples the statistical calculation logic from the pipeline.
-    It performs:
-    1. Parameter Normalization: Maps SciPy-style parameter names (e.g., 'shape')
-       to specific engine attributes (e.g., 'a', 's', 'df') using internal aliases.
-    2. Dynamic Introspection: Uses Python's 'inspect' module to determine if the
-       target statistic requires a Cumulative Distribution Function (CDF). This
-       ensures lazy evaluation, calculating the CDF only when necessary.
+    Decouples statistical calculation logic from the core pipeline by mapping parameter
+    names and dynamically evaluating required statistics.
 
     Attributes:
-        PARAM_ALIASES (dict): A map used to resolve naming discrepancies between
-            distribution fitting results and GoF test requirements.
+        PARAM_ALIASES (dict[str, list[str]]): Map resolving parameter naming discrepancies.
+        engine (Any): Underlying statistic calculation instance from pysatl-criterion.
     """
 
     PARAM_ALIASES = {
@@ -32,11 +26,30 @@ class GenericCriterion(AbstractCriterion):
     }
 
     def __init__(self, statistic_instance, display_name: str | None = None):
+        """Initialize the generic criterion adapter.
+
+        Args:
+            statistic_instance (Any): Engine instance from pysatl-criterion.
+            display_name (str | None): Optional custom display name override.
+        """
         name = display_name or statistic_instance.code()
         super().__init__(name=name)
         self.engine = statistic_instance
 
-    def calculate(self, data, dist, params):
+    def calculate(self, data, dist, params) -> float:
+        """Compute the goodness-of-fit statistic for the given distribution and sample.
+
+        Args:
+            data (np.ndarray): Sorted 1D numerical sample data array.
+            dist (AbstractDistribution): Candidate distribution instance.
+            params (dict): Estimated parameter dictionary returned by dist.fit().
+
+        Returns:
+            float: Calculated statistical criterion value.
+
+        Raises:
+            Exception: Re-raises any execution exception after logging debug info.
+        """
         for p_name, p_value in params.items():
             potential_targets = [p_name] + self.PARAM_ALIASES.get(p_name, [])
             for target in potential_targets:
