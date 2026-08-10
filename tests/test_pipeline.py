@@ -19,12 +19,12 @@ class TestDistributionPipeline:
         }
 
         dist1 = MagicMock()
-        dist1.name = "normal"
+        dist1.name = "Normal"
         dist1.support = (-float("inf"), float("inf"))
         dist1.fit.return_value = (0, 1)
 
         dist2 = MagicMock()
-        dist2.name = "beta"
+        dist2.name = "Beta"
         dist2.support = (0, 1)
 
         components.distributions = [dist1, dist2]
@@ -35,7 +35,7 @@ class TestDistributionPipeline:
         components.criterion_selector.get_applicable_criteria.return_value = [criterion]
 
         report = MagicMock()
-        report.distribution_name = "normal"
+        report.distribution_name = "Normal"
         report.parameters = None
         components.strategy.predict_report.return_value = report
 
@@ -61,10 +61,10 @@ class TestDistributionPipeline:
         fv, params = pipeline._evaluate_sample(data)
 
         assert isinstance(fv, FeatureVector)
-        assert "normal" in params
-        assert params["normal"] == (0, 1)
-        assert fv.candidates_scores["normal"]["AIC"] == 10.5
-        assert "beta" not in params
+        assert "Normal" in params
+        assert params["Normal"] == (0, 1)
+        assert fv.candidates_scores["normal"]["aic"] == 10.5
+        assert "Beta" not in params
 
     def test_evaluate_sample_fit_exception(self, mock_components):
         mock_components.distributions[0].fit.side_effect = Exception("Fit error")
@@ -74,7 +74,7 @@ class TestDistributionPipeline:
 
         fv, params = pipeline._evaluate_sample(data)
 
-        assert "normal" not in params
+        assert "Normal" not in params
         assert fv.candidates_scores["normal"] == {}
 
     def test_evaluate_sample_criterion_exception(self, mock_components):
@@ -86,7 +86,7 @@ class TestDistributionPipeline:
 
         fv, params = pipeline._evaluate_sample(data)
 
-        assert "normal" in params
+        assert "Normal" in params
         assert "AIC" not in fv.candidates_scores["normal"]
 
     def test_identify_best_with_bootstrap(self, mock_components):
@@ -129,14 +129,14 @@ class TestDistributionPipeline:
 
         with patch.object(pipeline, "_evaluate_sample") as mocked_eval:
             mocked_eval.side_effect = [
-                (MagicMock(), {"normal": (0, 1)}),
+                (MagicMock(), {"Normal": (0, 1)}),
                 Exception("Bootstrap iteration failed"),
             ]
 
             report = pipeline.identify_best(data, n_bootstraps=1)
 
             assert mocked_eval.call_count == 2
-            assert report.distribution_name == "normal"
+            assert report.distribution_name == "Normal"
 
     def test_evaluate_sample_no_valid_distributions(self, mock_components):
         for dist in mock_components.distributions:

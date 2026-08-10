@@ -1,3 +1,5 @@
+"""Abstract decision strategy interface module."""
+
 from abc import ABC, abstractmethod
 
 from pysatl_expert.models.feature_vector import FeatureVector
@@ -5,27 +7,22 @@ from pysatl_expert.models.report import Report
 
 
 class AbstractStrategy(ABC):
-    """
-    Interface for the decision-making module of the expert system.
+    """Base interface for the decision-making strategy module.
 
-    The Strategy interprets statistical evidence (scores and sample stats)
-    aggregated in a FeatureVector to select the most appropriate distribution.
-    Allows for pluggable logic: from simple heuristics to ML-classifiers.
+    Interprets aggregated sample statistics and GoF test scores to produce a distribution report.
     """
 
     @abstractmethod
     def predict_report(
         self, base_fv: FeatureVector, bootstrap_fvs: list[FeatureVector] | None = None
     ) -> Report:
-        """
-        Analyzes the provided FeatureVectors to determine the most likely
-        distribution law using original data and optional bootstrap results.
+        """Analyze FeatureVectors to determine the best-fitting distribution.
 
         Args:
-            base_fv: FeatureVector calculated on the original sample.
-            bootstrap_fvs: List of FeatureVectors calculated on resampled data.
+            base_fv (FeatureVector): FeatureVector computed on original sample.
+            bootstrap_fvs (list[FeatureVector] | None): Optional list of resampled FeatureVectors.
 
         Returns:
-            Report: The final verdict of the expert system.
+            Report: Final evaluation report with winner distribution and confidence scores.
         """
         pass

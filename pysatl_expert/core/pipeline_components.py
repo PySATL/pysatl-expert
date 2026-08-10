@@ -1,3 +1,5 @@
+"""Pipeline components registry module."""
+
 from pysatl_expert.core.criterion_selector import AbstractCriterionSelector
 from pysatl_expert.core.distribution import AbstractDistribution
 from pysatl_expert.core.strategy import AbstractStrategy
@@ -5,20 +7,16 @@ from pysatl_expert.models.feature_extractor import FeatureExtractor
 
 
 class PipelineComponents:
-    """
-    A registry container aggregating modular components for the expert system.
+    """Registry container aggregating modular components for the expert pipeline.
 
-    Centralizes candidate distributions, selection logic, decision strategies,
-    and profiling tools. This decoupling allows the pipeline logic to remain
-    independent of specific mathematical or algorithmic implementations.
+    Centralizes candidate distributions, criterion selection logic, decision strategy,
+    and feature extraction tools.
 
     Attributes:
         distributions (list[AbstractDistribution]): Candidate statistical models.
-        criterion_selector (AbstractCriterionSelector): Logic for picking
-            appropriate Goodness-of-Fit tests.
-        strategy (AbstractStrategy): Module for final distribution selection
-            (ML-based or heuristic).
-        feature_extractor (FeatureExtractor): Service for intrinsic data profiling.
+        criterion_selector (AbstractCriterionSelector): Logic for picking applicable GoF tests.
+        strategy (AbstractStrategy): Decision strategy for final distribution ranking.
+        feature_extractor (FeatureExtractor): Service for extracting continuous sample statistics.
     """
 
     def __init__(
@@ -28,8 +26,13 @@ class PipelineComponents:
         strategy: AbstractStrategy,
         feature_extractor: FeatureExtractor,
     ):
-        """
-        Initializes the component registry with pluggable modules.
+        """Initialize the pipeline component registry.
+
+        Args:
+            distributions (list[AbstractDistribution]): Candidate statistical model instances.
+            criterion_selector (AbstractCriterionSelector): GoF test selector instance.
+            strategy (AbstractStrategy): Decision strategy instance.
+            feature_extractor (FeatureExtractor): Feature extraction service instance.
         """
         self.distributions = distributions
         self.criterion_selector = criterion_selector

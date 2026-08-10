@@ -6,36 +6,37 @@ from pysatl_expert.core.distribution import AbstractDistribution
 
 class WeibullDistribution(AbstractDistribution):
     """
-    Two-parameter implementation of the Weibull probability distribution (minimum).
+    Three-parameter implementation of the Weibull probability distribution (minimum).
 
-    Defined by shape (c) and scale parameters. Features [0, inf) support,
-    allowing early-fail validation for non-positive data samples.
+    Defined by shape (c), location (loc), and scale parameters.
+    Support is (-inf, inf) to allow fitting shifted samples with negative values.
 
-    Mapping to SciPy: uses 'weibull_min' with 'shape' mapped to 'c'
-    and location fixed to zero.
+    Mapping to SciPy: uses 'weibull_min' with 'shape' mapped to 'c'.
     """
 
     def __init__(self):
         """
-        Initializes the distribution with a theoretical support of [0, inf).
+        Initializes the distribution with universal theoretical support (-inf, inf).
         """
-        super().__init__(name="Weibull", support=(0, np.inf))
+        super().__init__(name="Weibull", support=(-np.inf, np.inf))
 
     def fit(self, data: np.ndarray) -> dict:
         """
-        Estimates 'shape' and 'scale' parameters via MLE with fixed location (floc=0).
+        Estimates 'shape', 'loc', and 'scale' parameters via MLE.
         """
-        shape, _, scale = st.weibull_min.fit(data, floc=0)
-        return {"shape": shape, "scale": scale}
+        shape, loc, scale = st.weibull_min.fit(data)
+        return {"shape": shape, "loc": loc, "scale": scale}
 
     def pdf(self, data: np.ndarray, params: dict) -> np.ndarray:
         """
         Evaluates the Weibull probability density function (PDF).
         """
-        return st.weibull_min.pdf(data, c=params["shape"], scale=params["scale"])
+        loc = params.get("loc", 0)
+        return st.weibull_min.pdf(data, c=params["shape"], loc=loc, scale=params["scale"])
 
     def cdf(self, data: np.ndarray, params: dict) -> np.ndarray:
         """
         Evaluates the cumulative distribution function (CDF) for GoF analysis.
         """
-        return st.weibull_min.cdf(data, c=params["shape"], scale=params["scale"])
+        loc = params.get("loc", 0)
+        return st.weibull_min.cdf(data, c=params["shape"], loc=loc, scale=params["scale"])
