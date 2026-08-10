@@ -1,10 +1,10 @@
 import numpy as np
-import scipy.stats as st
+
+from pysatl_expert.distributions.beta import BetaDistribution
 from pysatl_expert.distributions.exponential import ExponentialDistribution
-from pysatl_expert.distributions.weibull import WeibullDistribution
 from pysatl_expert.distributions.gamma import GammaDistribution
 from pysatl_expert.distributions.log_normal import LogNormalDistribution
-from pysatl_expert.distributions.beta import BetaDistribution
+from pysatl_expert.distributions.weibull import WeibullDistribution
 from pysatl_expert.pipeline import DistributionPipeline
 
 

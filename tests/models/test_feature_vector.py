@@ -6,6 +6,8 @@ from pysatl_expert.models.feature_vector import FeatureVector
 @pytest.fixture
 def mock_data():
     sample_stats = {
+        "min": 0.0,
+        "max": 10.0,
         "sample_size": 100,
         "skew": 0.5,
         "kurtosis": 3.0,
@@ -27,7 +29,8 @@ def test_feature_vector_init_filtering(mock_data):
 
     assert "extra_key" not in fv.sample_stats
     assert len(fv.sample_stats) == len(FeatureVector.STAT_KEYS)
-    assert fv.candidates_scores == scores
+    assert "normal" in fv.candidates_scores
+    assert "exponential" in fv.candidates_scores
 
 
 def test_feature_vector_as_flat_list_length(mock_data):
@@ -36,10 +39,9 @@ def test_feature_vector_as_flat_list_length(mock_data):
     flat = fv.as_flat_list()
 
     num_stats = len(FeatureVector.STAT_KEYS)
-    num_criteria = len(FeatureVector.CRITERIA_KEYS)
-    num_dists = len(scores)
+    num_criteria = len(FeatureVector.CRITERIA_SCHEMA)
 
-    expected_length = num_stats + (num_dists * num_criteria)
+    expected_length = num_stats + num_criteria
     assert len(flat) == expected_length
 
 
@@ -48,17 +50,16 @@ def test_feature_vector_as_flat_list_order(mock_data):
     fv = FeatureVector(stats, scores)
     flat = fv.as_flat_list()
 
-    assert flat[0] == 100.0
-    assert flat[1] == 0.5
-
-    assert flat[12] == 0.48
+    assert flat[0] == 0.0   # min
+    assert flat[1] == 10.0  # max
+    assert flat[2] == 100.0 # sample_size
 
 
 def test_feature_vector_as_flat_list_missing_values():
     fv = FeatureVector({}, {"Normal": {}})
     flat = fv.as_flat_list()
 
-    assert all(val == 0.0 for val in flat)
+    assert all(val == -1.0 for val in flat)
 
 
 def test_feature_vector_as_dict(mock_data):
@@ -69,4 +70,4 @@ def test_feature_vector_as_dict(mock_data):
     assert "stats" in d
     assert "scores" in d
     assert d["stats"]["sample_size"] == 100
-    assert d["scores"]["Normal"]["shapiro_wilk"] == 0.95
+    assert d["scores"]["normal"]["shapiro_wilk"] == 0.95
