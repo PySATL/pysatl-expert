@@ -1,5 +1,10 @@
-from pysatl_criterion.distribution.distribution_type import DistributionType
-from pysatl_criterion.utils.statistic import get_available_criteria
+from pysatl_expert.criteria.catalog import (
+    CRITERIA_SPECS,
+    RAW_CRITERIA_EXCLUSIONS,
+)
+
+
+_NUMERICALLY_UNSTABLE_TRAINING_FEATURES = frozenset(RAW_CRITERIA_EXCLUSIONS)
 
 
 class FeatureVector:
@@ -15,43 +20,23 @@ class FeatureVector:
     """
 
     STAT_KEYS = [
-        "min",
-        "max",
         "sample_size",
         "skew",
         "kurtosis",
-        "coef_of_variation",
         "relative_iqr",
         "entropy",
     ]
 
-    CRITERIA_SCHEMA = []
-    BLACKLIST = {
-        "bhs",
-        "kl_int",
-        "kl_sup",
-        "cq*",
-        "rs",
-        "ahs",
-        "hp",
-        "independencenumber",
-        "cliquenumber",
-        "avgdegree",
-        "edgesnumber",
-        "maxdegree",
-        "connectedcomponents",
-    }
-
-    for dist in DistributionType:
-        dist_name = dist.value.lower()
-        available_tests = get_available_criteria(dist)
-
-        for crit_code in available_tests:
-            clean_code = crit_code.lower()
-            if clean_code not in BLACKLIST:
-                CRITERIA_SCHEMA.append((dist_name, clean_code))
-
-    CRITERIA_SCHEMA = sorted(CRITERIA_SCHEMA)
+    CRITERIA_SCHEMA = [(spec.distribution, spec.short_code) for spec in CRITERIA_SPECS]
+    FEATURE_NAMES = STAT_KEYS + [spec.feature_name for spec in CRITERIA_SPECS]
+    # Retain exclusions so legacy full-schema datasets cannot train on unstable criteria.
+    NUMERICALLY_UNSTABLE_TRAINING_FEATURES = _NUMERICALLY_UNSTABLE_TRAINING_FEATURES
+    EXCLUDED_TRAINING_FEATURES = _NUMERICALLY_UNSTABLE_TRAINING_FEATURES
+    TRAINING_FEATURE_NAMES = [
+        feature
+        for feature in FEATURE_NAMES
+        if feature not in _NUMERICALLY_UNSTABLE_TRAINING_FEATURES
+    ]
 
     def __init__(self, sample_stats: dict, candidates_scores: dict):
         """Initialize the FeatureVector with sample statistics and GoF scores.
@@ -66,29 +51,35 @@ class FeatureVector:
             for k, v in candidates_scores.items()
         }
 
-    def as_flat_list(self, missing_value: float = -1.0) -> list[float]:
-        """Convert aggregated features into a 1D flat list for ML model input.
+    def as_flat_list(
+        self,
+        missing_value: float = float("nan"),
+        *,
+        feature_names: list[str] | None = None,
+    ) -> list[float]:
+        """Convert aggregated values to a requested model feature schema.
 
         Args:
-            missing_value (float): Fallback value for missing/inapplicable tests. Defaults to -1.0.
+            missing_value: Fallback for missing or inapplicable values.
+            feature_names: Ordered model schema. Defaults to the current training schema.
 
         Returns:
-            list[float]: Flat numerical vector matching the schema order.
+            Numerical values in the requested schema order.
         """
-        flat_vector = []
-
-        for key in self.STAT_KEYS:
-            val = self.sample_stats.get(key, missing_value)
-            flat_vector.append(float(val))
-
-        for dist_name, crit_key in self.CRITERIA_SCHEMA:
-            if dist_name in self.candidates_scores:
-                val = self.candidates_scores[dist_name].get(crit_key, missing_value)
-                flat_vector.append(float(val))
+        schema = self.FEATURE_NAMES if feature_names is None else feature_names
+        values = []
+        for feature_name in schema:
+            if feature_name in self.STAT_KEYS:
+                value = self.sample_stats.get(feature_name, missing_value)
+            elif "__" in feature_name:
+                distribution, criterion = feature_name.split("__", maxsplit=1)
+                value = self.candidates_scores.get(distribution, {}).get(
+                    criterion, missing_value
+                )
             else:
-                flat_vector.append(float(missing_value))
-
-        return flat_vector
+                value = missing_value
+            values.append(float(value))
+        return values
 
     def as_dict(self) -> dict:
         """Convert feature vector data into a structured dictionary.
