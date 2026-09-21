@@ -1,5 +1,3 @@
-"""Abstract distribution interface module."""
-
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -72,3 +70,42 @@ class AbstractDistribution(ABC):
             np.ndarray: Computed CDF probability values.
         """
         pass
+
+    def prepare_criterion_input(
+        self, data: np.ndarray, params: dict
+    ) -> tuple[np.ndarray, dict]:
+        """Prepare observations and parameters for a criterion engine."""
+        return np.asarray(data, dtype=float), params
+
+    def _standardize_criterion_input(
+        self,
+        data: np.ndarray,
+        loc: float,
+        scale: float,
+        *,
+        positive_support: bool = False,
+    ) -> np.ndarray:
+        """Transform observations to canonical location-scale coordinates."""
+        scale = float(scale)
+        distribution_name = self.name.lower().replace("_", "")
+        if not np.isfinite(scale) or scale <= 0:
+            raise ValueError(
+                f"Scale must be finite and positive for {distribution_name}, got {scale}"
+            )
+
+        standardized = (np.asarray(data, dtype=float) - float(loc)) / scale
+        if not positive_support:
+            return standardized
+
+        tolerance = (
+            np.finfo(float).eps
+            * max(1.0, float(np.max(np.abs(standardized))))
+            * 16
+        )
+        minimum = float(np.min(standardized))
+        if minimum < -tolerance:
+            raise ValueError(
+                f"Estimated loc={float(loc)} exceeds the sample minimum for "
+                f"{distribution_name}"
+            )
+        return np.maximum(standardized, np.nextafter(0.0, 1.0))

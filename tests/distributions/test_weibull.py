@@ -11,6 +11,7 @@ def test_weibull_distribution_logic():
     assert "shape" in params
     assert "loc" in params
     assert "scale" in params
+    assert params["loc"] == 0.0
 
     pdf = dist.pdf(data, params)
     cdf = dist.cdf(data, params)
@@ -18,4 +19,4 @@ def test_weibull_distribution_logic():
     assert pdf.shape == (3,)
     assert cdf.shape == (3,)
     assert np.all(cdf >= 0) and np.all(cdf <= 1)
-    assert dist.support == (-np.inf, np.inf)
+    assert dist.support == (0.0, np.inf)

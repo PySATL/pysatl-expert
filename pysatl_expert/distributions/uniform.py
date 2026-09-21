@@ -1,5 +1,3 @@
-"""Continuous Uniform probability distribution module."""
-
 import numpy as np
 import scipy.stats as st
 
@@ -27,8 +25,20 @@ class UniformDistribution(AbstractDistribution):
         Returns:
             dict[str, float]: Map containing boundary parameters 'a' and 'b'.
         """
-        loc, scale = st.uniform.fit(data)
-        return {"a": float(np.min(data)) - 1e-9, "b": float(np.max(data)) + 1e-9}
+        values = np.asarray(data, dtype=float)
+        data_min = float(np.min(values))
+        data_max = float(np.max(values))
+        span = data_max - data_min
+        if not np.isfinite(span) or span <= 0:
+            raise ValueError("Uniform fitting requires a non-constant finite sample")
+        margin = span * 1e-9
+        lower = data_min - margin
+        if lower >= data_min:
+            lower = float(np.nextafter(data_min, -np.inf))
+        upper = data_max + margin
+        if upper <= data_max:
+            upper = float(np.nextafter(data_max, np.inf))
+        return {"a": lower, "b": upper}
 
     def pdf(self, data: np.ndarray, params: dict) -> np.ndarray:
         """Evaluate the Uniform probability density function (PDF).
@@ -53,3 +63,13 @@ class UniformDistribution(AbstractDistribution):
             np.ndarray: Computed CDF values.
         """
         return st.uniform.cdf(data, loc=params["a"], scale=params["b"] - params["a"])
+
+    def prepare_criterion_input(
+        self, data: np.ndarray, params: dict
+    ) -> tuple[np.ndarray, dict]:
+        """Map observations to the canonical Uniform interval."""
+        lower = float(params["a"])
+        observations = self._standardize_criterion_input(
+            data, lower, float(params["b"]) - lower
+        )
+        return observations, {"a": 0.0, "b": 1.0}

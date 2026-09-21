@@ -1,5 +1,3 @@
-"""Normal (Gaussian) probability distribution module."""
-
 import numpy as np
 import scipy.stats as st
 
@@ -53,3 +51,12 @@ class NormalDistribution(AbstractDistribution):
             np.ndarray: Computed CDF values.
         """
         return st.norm.cdf(data, loc=params["mu"], scale=params["std"])
+
+    def prepare_criterion_input(
+        self, data: np.ndarray, params: dict
+    ) -> tuple[np.ndarray, dict]:
+        """Standardize observations for canonical Normal criteria."""
+        observations = self._standardize_criterion_input(
+            data, params["mu"], params["std"]
+        )
+        return observations, {"mean": 0.0, "var": 1.0}

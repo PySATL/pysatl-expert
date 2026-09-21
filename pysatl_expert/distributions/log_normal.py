@@ -6,21 +6,20 @@ from pysatl_expert.core.distribution import AbstractDistribution
 
 class LogNormalDistribution(AbstractDistribution):
     """
-    Three-parameter implementation of the Log-Normal probability distribution.
+    Fixed-origin implementation of the Log-Normal probability distribution.
 
-    Defined by a shape parameter (s), location (loc), and scale. A variable X is
-    log-normally distributed if X - loc has a log-normal distribution.
-    Support is (-inf, inf) to allow fitting shifted samples with negative values.
+    Defined by a shape parameter (s) and scale, with loc fixed at zero.
+    Support is [0, inf), matching the experiment generator used for training data.
 
-    Mapping to SciPy: 's' maps to shape, 'scale' is exp(mean), location estimated via MLE.
+    Mapping to SciPy: 's' maps to shape and 'scale' is exp(mean), with ``floc=0``.
     """
 
     def __init__(self):
-        super().__init__(name="LogNormal", support=(-np.inf, np.inf))
+        super().__init__(name="LogNormal", support=(0.0, np.inf))
 
     def fit(self, data: np.ndarray) -> dict:
-        shape, loc, scale = st.lognorm.fit(data)
-        return {"s": shape, "loc": loc, "scale": scale}
+        shape, _, scale = st.lognorm.fit(data, floc=0.0)
+        return {"s": shape, "loc": 0.0, "scale": scale}
 
     def pdf(self, data: np.ndarray, params: dict) -> np.ndarray:
         loc = params.get("loc", 0)
@@ -29,3 +28,15 @@ class LogNormalDistribution(AbstractDistribution):
     def cdf(self, data: np.ndarray, params: dict) -> np.ndarray:
         loc = params.get("loc", 0)
         return st.lognorm.cdf(data, s=params["s"], loc=loc, scale=params["scale"])
+
+    def prepare_criterion_input(
+        self, data: np.ndarray, params: dict
+    ) -> tuple[np.ndarray, dict]:
+        """Standardize observations for canonical Log-Normal criteria."""
+        observations = self._standardize_criterion_input(
+            data,
+            params.get("loc", 0.0),
+            params.get("scale", 1.0),
+            positive_support=True,
+        )
+        return observations, {"s": float(params["s"]), "scale": 1.0}

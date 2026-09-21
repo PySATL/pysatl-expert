@@ -1,5 +1,3 @@
-"""Student's t-distribution module."""
-
 import numpy as np
 import scipy.stats as st
 
@@ -27,8 +25,19 @@ class StudentDistribution(AbstractDistribution):
         Returns:
             dict[str, float]: Map containing 'df', 'loc', and 'scale' parameters.
         """
-        df, loc, scale = st.t.fit(data)
-        return {"df": df, "loc": loc, "scale": scale}
+        values = np.asarray(data, dtype=float)
+        center = float(np.mean(values))
+        reference_scale = float(np.std(values))
+        if not np.isfinite(reference_scale) or reference_scale <= 0:
+            raise ValueError("Student fitting requires a non-constant finite sample")
+
+        standardized = (values - center) / reference_scale
+        df, loc, scale = st.t.fit(standardized)
+        return {
+            "df": df,
+            "loc": center + loc * reference_scale,
+            "scale": scale * reference_scale,
+        }
 
     def pdf(self, data: np.ndarray, params: dict) -> np.ndarray:
         """Evaluate the Student's t probability density function (PDF).
@@ -53,3 +62,16 @@ class StudentDistribution(AbstractDistribution):
             np.ndarray: Computed CDF values.
         """
         return st.t.cdf(data, df=params["df"], loc=params["loc"], scale=params["scale"])
+
+    def prepare_criterion_input(
+        self, data: np.ndarray, params: dict
+    ) -> tuple[np.ndarray, dict]:
+        """Standardize observations for canonical Student criteria."""
+        observations = self._standardize_criterion_input(
+            data, params["loc"], params["scale"]
+        )
+        return observations, {
+            "df": float(params["df"]),
+            "loc": 0.0,
+            "scale": 1.0,
+        }

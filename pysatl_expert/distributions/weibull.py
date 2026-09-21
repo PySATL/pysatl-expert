@@ -6,26 +6,33 @@ from pysatl_expert.core.distribution import AbstractDistribution
 
 class WeibullDistribution(AbstractDistribution):
     """
-    Three-parameter implementation of the Weibull probability distribution (minimum).
+    Fixed-origin implementation of the Weibull probability distribution (minimum).
 
-    Defined by shape (c), location (loc), and scale parameters.
-    Support is (-inf, inf) to allow fitting shifted samples with negative values.
+    Defined by shape (c) and scale, with loc fixed at zero.
+    Support is [0, inf), matching the experiment generator used for training data.
 
     Mapping to SciPy: uses 'weibull_min' with 'shape' mapped to 'c'.
     """
 
     def __init__(self):
         """
-        Initializes the distribution with universal theoretical support (-inf, inf).
+        Initialize the distribution with fixed-origin support [0, inf).
         """
-        super().__init__(name="Weibull", support=(-np.inf, np.inf))
+        super().__init__(name="Weibull", support=(0.0, np.inf))
 
     def fit(self, data: np.ndarray) -> dict:
         """
-        Estimates 'shape', 'loc', and 'scale' parameters via MLE.
+        Estimate shape and scale via MLE with location fixed at zero.
         """
-        shape, loc, scale = st.weibull_min.fit(data)
-        return {"shape": shape, "loc": loc, "scale": scale}
+        values = np.asarray(data, dtype=float)
+        reference_scale = float(np.ptp(values))
+        standardized = values / reference_scale
+        shape, _, scale = st.weibull_min.fit(standardized, floc=0)
+        return {
+            "shape": shape,
+            "loc": 0.0,
+            "scale": scale * reference_scale,
+        }
 
     def pdf(self, data: np.ndarray, params: dict) -> np.ndarray:
         """
@@ -40,3 +47,15 @@ class WeibullDistribution(AbstractDistribution):
         """
         loc = params.get("loc", 0)
         return st.weibull_min.cdf(data, c=params["shape"], loc=loc, scale=params["scale"])
+
+    def prepare_criterion_input(
+        self, data: np.ndarray, params: dict
+    ) -> tuple[np.ndarray, dict]:
+        """Standardize observations for canonical Weibull criteria."""
+        observations = self._standardize_criterion_input(
+            data,
+            params.get("loc", 0.0),
+            params.get("scale", 1.0),
+            positive_support=True,
+        )
+        return observations, {"a": 1.0, "k": float(params["shape"])}

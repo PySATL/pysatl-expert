@@ -6,26 +6,26 @@ from pysatl_expert.core.distribution import AbstractDistribution
 
 class ExponentialDistribution(AbstractDistribution):
     """
-    Two-parameter implementation of the Exponential probability distribution with location shift.
+    Fixed-origin implementation of the Exponential probability distribution.
 
-    Characterized by rate parameter (λ = 1/scale) and location parameter (loc).
-    Support is (-inf, inf) to allow fitting shifted samples with negative values.
+    Characterized by rate parameter (λ = 1/scale) with loc fixed at zero.
+    Support is [0, inf), matching the experiment generator used for training data.
 
-    Mapping to SciPy: 'scale = 1/lambda', with location estimated via MLE.
+    Mapping to SciPy: 'scale = 1/lambda', with ``floc=0``.
     """
 
     def __init__(self):
         """
-        Initializes the distribution with universal theoretical support (-inf, inf).
+        Initialize the distribution with fixed-origin support [0, inf).
         """
-        super().__init__(name="Exponential", support=(-np.inf, np.inf))
+        super().__init__(name="Exponential", support=(0.0, np.inf))
 
     def fit(self, data: np.ndarray) -> dict:
         """
-        Estimates location (loc) and rate parameter (λ) via MLE.
+        Estimate rate parameter (λ) via MLE with location fixed at zero.
         """
-        loc, scale = st.expon.fit(data)
-        return {"loc": loc, "scale": scale, "lambda": 1 / scale if scale > 0 else 1.0}
+        _, scale = st.expon.fit(data, floc=0.0)
+        return {"loc": 0.0, "scale": scale, "lambda": 1 / scale}
 
     def pdf(self, data: np.ndarray, params: dict) -> np.ndarray:
         """
@@ -42,3 +42,15 @@ class ExponentialDistribution(AbstractDistribution):
         loc = params.get("loc", 0)
         scale = params.get("scale", 1 / params.get("lambda", 1))
         return st.expon.cdf(data, loc=loc, scale=scale)
+
+    def prepare_criterion_input(
+        self, data: np.ndarray, params: dict
+    ) -> tuple[np.ndarray, dict]:
+        """Standardize observations for canonical Exponential criteria."""
+        observations = self._standardize_criterion_input(
+            data,
+            params.get("loc", 0.0),
+            params.get("scale", 1.0),
+            positive_support=True,
+        )
+        return observations, {"lam": 1.0}
