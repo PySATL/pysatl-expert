@@ -1,10 +1,15 @@
+import gc
 from collections.abc import Mapping
 
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.utils import check_random_state
 
 from pysatl_expert.models.feature_vector import FeatureVector
+
+
+_SELECTION_FOREST_BATCH_SIZE = 10
 
 
 class HierarchicalExpertModel:
@@ -85,6 +90,36 @@ class HierarchicalExpertModel:
             raise ValueError("n_stage2 must be positive or None")
 
     @staticmethod
+    def _batched_feature_importances(
+        features: np.ndarray,
+        target: pd.Series | np.ndarray,
+        *,
+        n_estimators: int,
+        n_jobs: int,
+        batch_size: int,
+    ) -> np.ndarray:
+        if batch_size < 1:
+            raise ValueError("batch_size must be positive")
+
+        random_state = check_random_state(42)
+        tree_importances: list[np.ndarray] = []
+        for batch_start in range(0, n_estimators, batch_size):
+            selector = RandomForestClassifier(
+                n_estimators=min(batch_size, n_estimators - batch_start),
+                max_depth=15,
+                bootstrap=True,
+                random_state=random_state,
+                n_jobs=n_jobs,
+            )
+            selector.fit(features, target)
+            tree_importances.extend(
+                tree.feature_importances_ for tree in selector.estimators_
+            )
+            del selector
+            gc.collect()
+        return np.mean(tree_importances, axis=0)
+
+    @staticmethod
     def _select_top_features(
         features: pd.DataFrame,
         target: pd.Series,
@@ -97,15 +132,18 @@ class HierarchicalExpertModel:
             raise ValueError(f"Insufficient eligible features: {len(candidates)} < {count}")
         if count is None or count >= len(candidates):
             return candidates.copy()
-        selector = RandomForestClassifier(
+        candidate_frame = features.loc[:, candidates]
+        candidate_matrix = candidate_frame.to_numpy(copy=False)
+        del candidate_frame
+        feature_importances = HierarchicalExpertModel._batched_feature_importances(
+            candidate_matrix,
+            target,
             n_estimators=n_estimators,
-            max_depth=15,
-            bootstrap=True,
-            random_state=42,
             n_jobs=n_jobs,
+            batch_size=_SELECTION_FOREST_BATCH_SIZE,
         )
-        selector.fit(features[candidates], target)
-        importances = pd.Series(selector.feature_importances_, index=candidates)
+        del candidate_matrix
+        importances = pd.Series(feature_importances, index=candidates)
         return importances.nlargest(count).index.tolist()
 
     def select_features(

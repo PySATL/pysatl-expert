@@ -30,7 +30,6 @@ class FeatureVector:
 
     CRITERIA_SCHEMA = [(spec.distribution, spec.short_code) for spec in CRITERIA_SPECS]
     FEATURE_NAMES = STAT_KEYS + [spec.feature_name for spec in CRITERIA_SPECS]
-    # Retain exclusions so legacy full-schema datasets cannot train on unstable criteria.
     NUMERICALLY_UNSTABLE_TRAINING_FEATURES = _NUMERICALLY_UNSTABLE_TRAINING_FEATURES
     EXCLUDED_TRAINING_FEATURES = _NUMERICALLY_UNSTABLE_TRAINING_FEATURES
     TRAINING_FEATURE_NAMES = [

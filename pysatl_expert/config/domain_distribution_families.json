@@ -1,15 +1,15 @@
 {
-  "Family_1": [
+  "SymmetricUnbounded": [
     "Normal",
     "Student"
   ],
-  "Family_2": [
+  "PositiveUnbounded": [
     "Exponential",
     "Gamma",
     "LogNormal",
     "Weibull"
   ],
-  "Family_3": [
+  "Bounded": [
     "Beta",
     "Uniform"
   ]

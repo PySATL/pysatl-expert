@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.ensemble import RandomForestClassifier
 
 from pysatl_expert.models.hierarchical_model import HierarchicalExpertModel
 
@@ -155,3 +156,34 @@ def test_feature_selection_supports_per_family_budgets_and_complete_stage2():
     assert len(stage2["low"]) == 1
     assert len(stage2["high"]) == 2
     assert "aux" not in stage2["low"]
+
+
+def test_batched_selection_importances_match_one_complete_forest():
+    rng = np.random.RandomState(7)
+    features = rng.normal(size=(1_000, 12)).astype(np.float32)
+    target = (
+        features[:, 0]
+        + 0.7 * features[:, 3]
+        + rng.normal(size=len(features)) * 0.2
+        > 0
+    ).astype(int)
+    complete_forest = RandomForestClassifier(
+        n_estimators=37,
+        max_depth=15,
+        bootstrap=True,
+        random_state=42,
+        n_jobs=1,
+    ).fit(features, target)
+
+    batched_importances = HierarchicalExpertModel._batched_feature_importances(
+        features,
+        target,
+        n_estimators=37,
+        n_jobs=1,
+        batch_size=7,
+    )
+
+    np.testing.assert_array_equal(
+        batched_importances,
+        complete_forest.feature_importances_,
+    )

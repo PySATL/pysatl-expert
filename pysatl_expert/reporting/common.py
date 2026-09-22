@@ -1,5 +1,3 @@
-"""Adapt verified fitted parameters to SciPy distributions for plotting."""
-
 import math
 
 import scipy.stats as stats
