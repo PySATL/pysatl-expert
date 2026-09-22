@@ -87,3 +87,28 @@ def test_fixed_origin_distribution_fit_is_scale_equivariant(distribution):
         assert transformed[key] == pytest.approx(base[key], rel=1e-7)
     if "lambda" in base:
         assert transformed["lambda"] == pytest.approx(base["lambda"] / factor)
+
+
+@pytest.mark.parametrize(
+    "distribution",
+    [
+        ExponentialDistribution(),
+        WeibullDistribution(),
+        GammaDistribution(),
+        LogNormalDistribution(),
+    ],
+)
+@pytest.mark.parametrize("missing_parameter", ["loc", "scale"])
+def test_fixed_origin_distribution_requires_fitted_location_and_scale(
+    distribution, missing_parameter
+):
+    data = np.array([0.5, 1.0, 2.0, 4.0, 8.0])
+    params = distribution.fit(data)
+    params.pop(missing_parameter)
+
+    with pytest.raises(KeyError, match=missing_parameter):
+        distribution.pdf(data, params)
+    with pytest.raises(KeyError, match=missing_parameter):
+        distribution.cdf(data, params)
+    with pytest.raises(KeyError, match=missing_parameter):
+        distribution.prepare_criterion_input(data, params)

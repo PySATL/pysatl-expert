@@ -15,7 +15,8 @@ class FeatureVector:
     Attributes:
         STAT_KEYS (list[str]): Key names of descriptive sample statistics.
         CRITERIA_SCHEMA (list[tuple[str, str]]): Ordered list of (dist_name, test_code) tuples.
-        sample_stats (dict[str, float]): Map of calculated descriptive statistics.
+        sample_stats (dict[str, float]): Model statistics from the full descriptive snapshot.
+        descriptive_stats (dict[str, float]): Full snapshot retained for presentation.
         candidates_scores (dict[str, dict[str, float]]): Map of GoF test scores per distribution.
     """
 
@@ -46,6 +47,7 @@ class FeatureVector:
             candidates_scores (dict): Dictionary of GoF criterion scores per distribution.
         """
         self.sample_stats = {k: v for k, v in sample_stats.items() if k in self.STAT_KEYS}
+        self.descriptive_stats = dict(sample_stats)
         self.candidates_scores = {
             k.lower(): {ck.lower(): cv for ck, cv in v.items()}
             for k, v in candidates_scores.items()

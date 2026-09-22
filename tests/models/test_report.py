@@ -14,6 +14,7 @@ def test_report_init():
     assert report.all_scores == all_scores
     assert report.parameters == params
     assert report.final_ranks == ranks
+    assert report.confidence_kind == "model_probability"
 
 
 def test_report_str_json_success():
@@ -67,3 +68,19 @@ def test_report_str_unserializable_value_no_item():
     output = str(report)
     assert "Winner:      norm" in output
     assert "(1+2j)" in output
+
+
+def test_report_with_model_confidence_and_bootstrap_stability():
+    report = Report(
+        distribution_name="norm",
+        confidence=0.85,
+        all_scores={"aic": 10.5},
+        confidence_kind="bootstrap_stability",
+        model_confidence=0.92,
+        bootstrap_stability=0.85,
+    )
+    assert report.model_confidence == 0.92
+    assert report.bootstrap_stability == 0.85
+    output = str(report)
+    assert "Model confidence:    0.92" in output
+    assert "Bootstrap stability: 0.85" in output

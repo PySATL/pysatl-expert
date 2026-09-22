@@ -15,6 +15,11 @@ def test_calculate_sample_stats_standard():
     assert isinstance(stats["skew"], float)
     assert isinstance(stats["kurtosis"], float)
     assert "coef_of_variation" not in stats
+    assert stats["mean"] == 3.0
+    assert stats["median"] == 3.0
+    assert stats["standard_deviation"] == pytest.approx(np.std(data))
+    assert stats["variance"] == pytest.approx(np.var(data))
+    assert stats["iqr"] == 2.0
     assert stats["relative_iqr"] > 0
     assert isinstance(stats["entropy"], float)
 
@@ -60,6 +65,7 @@ def test_calculate_sample_stats_types():
     assert isinstance(stats["min"], float)
     assert isinstance(stats["max"], float)
     assert isinstance(stats["relative_iqr"], float)
+    assert isinstance(stats["standard_deviation"], float)
 
 
 def test_calculate_sample_stats_constant_data():

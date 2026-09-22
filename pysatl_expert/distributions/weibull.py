@@ -38,14 +38,14 @@ class WeibullDistribution(AbstractDistribution):
         """
         Evaluates the Weibull probability density function (PDF).
         """
-        loc = params.get("loc", 0)
+        loc = params["loc"]
         return st.weibull_min.pdf(data, c=params["shape"], loc=loc, scale=params["scale"])
 
     def cdf(self, data: np.ndarray, params: dict) -> np.ndarray:
         """
         Evaluates the cumulative distribution function (CDF) for GoF analysis.
         """
-        loc = params.get("loc", 0)
+        loc = params["loc"]
         return st.weibull_min.cdf(data, c=params["shape"], loc=loc, scale=params["scale"])
 
     def prepare_criterion_input(
@@ -54,8 +54,8 @@ class WeibullDistribution(AbstractDistribution):
         """Standardize observations for canonical Weibull criteria."""
         observations = self._standardize_criterion_input(
             data,
-            params.get("loc", 0.0),
-            params.get("scale", 1.0),
+            params["loc"],
+            params["scale"],
             positive_support=True,
         )
         return observations, {"a": 1.0, "k": float(params["shape"])}

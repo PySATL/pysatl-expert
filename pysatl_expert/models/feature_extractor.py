@@ -3,29 +3,28 @@ import scipy.stats as stats
 
 
 class FeatureExtractor:
-    """Service for calculating intrinsic statistical properties of a sample.
-
-    Computes descriptive metrics used to profile the shape and complexity of input data.
-    """
+    """Calculate descriptive statistics used by the model and reports."""
 
     def calculate_sample_stats(self, data: np.ndarray) -> dict[str, float | int]:
-        """Compute scale-invariant and robust sample statistics.
+        """Compute descriptive sample statistics.
 
         Args:
             data (np.ndarray): Raw numerical sample array to profile.
 
         Returns:
-            dict[str, float | int]: Calculated feature map including min, max, sample_size,
-                skew, kurtosis, relative_iqr, and entropy.
+            dict[str, float | int]: Statistics for model features and presentation.
         """
-        data_min = np.min(data)
-        data_max = np.max(data)
+        data_min = float(np.min(data))
+        data_max = float(np.max(data))
         n = len(data)
+        mean = float(np.mean(data))
+        median = float(np.median(data))
 
         skew = stats.skew(data)
         kurt = stats.kurtosis(data)
 
         std_val = float(np.std(data))
+        variance = float(np.var(data))
 
         q25, q75 = np.percentile(data, [25, 75])
         iqr = q75 - q25
@@ -34,11 +33,16 @@ class FeatureExtractor:
         entropy = stats.entropy(np.histogram(data, bins="auto")[0])
 
         return {
-            "min": float(data_min),
-            "max": float(data_max),
+            "min": data_min,
+            "max": data_max,
             "sample_size": int(n),
+            "mean": mean,
+            "median": median,
+            "standard_deviation": std_val,
+            "variance": variance,
             "skew": float(skew),
             "kurtosis": float(kurt),
+            "iqr": float(iqr),
             "relative_iqr": float(relative_iqr),
             "entropy": float(entropy),
         }

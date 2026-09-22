@@ -1,306 +1,181 @@
-"""ML-based strategy module for distribution classification using Random Forest."""
-
 import logging
-import sqlite3
-import struct
 from pathlib import Path
-from typing import Dict, List
 
 import numpy as np
-import zstandard as zstd
+import pandas as pd
 from joblib import load as load_model
 
 from pysatl_expert.core.strategy import AbstractStrategy
 from pysatl_expert.models.feature_vector import FeatureVector
+from pysatl_expert.models.hierarchical_model import HierarchicalExpertModel
+from pysatl_expert.models.model_manifest import (
+    validate_loaded_model,
+    verify_model_manifest,
+)
 from pysatl_expert.models.report import Report
 
 
 logger = logging.getLogger(__name__)
 
 
-class CVCache:
-    """Thread-safe cache for critical values queried from SQLite database.
-
-    Attributes:
-        db_path (str): Path to SQLite database containing limit_distributions table.
-    """
-
-    def __init__(self, db_path: str):
-        """Initialize the cache and preload all critical values from the database.
-
-        Args:
-            db_path (str): Path to SQLite database file.
-
-        Raises:
-            FileNotFoundError: If the database file does not exist.
-            sqlite3.Error: If the database query fails.
-        """
-        self.db_path = db_path
-        self._cache: Dict[str, Dict[str, np.ndarray]] = {}
-        self._load_cache()
-
-    def _load_cache(self) -> None:
-        """Load all critical values from the database into memory and build interpolation arrays."""
-        if not Path(self.db_path).exists():
-            raise FileNotFoundError(f"Database not found: {self.db_path}")
-
-        raw_dict: Dict[str, Dict[int, float]] = {}
-
-        try:
-            conn = sqlite3.connect(self.db_path)
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-
-            cursor.execute(
-                """
-                SELECT DISTINCT criterion_code, sample_size, results_statistics
-                FROM limit_distributions
-                ORDER BY criterion_code, sample_size
-                """
-            )
-
-            rows = cursor.fetchall()
-            logger.info(f"Loading {len(rows)} critical value records from database...")
-
-            for row in rows:
-                criterion_code = row["criterion_code"]
-                sample_size = row["sample_size"]
-                results_blob = row["results_statistics"]
-
-                try:
-                    results_array = self._decompress_results(results_blob)
-                    cv = float(np.percentile(results_array, 95))
-
-                    code_lower = criterion_code.lower()
-                    if code_lower not in raw_dict:
-                        raw_dict[code_lower] = {}
-
-                    raw_dict[code_lower][sample_size] = cv
-
-                except Exception as e:
-                    logger.warning(
-                        f"Error processing CV for {criterion_code} (n={sample_size}): {e}"
-                    )
-
-            conn.close()
-
-            for code, size_map in raw_dict.items():
-                sorted_sizes = sorted(size_map.keys())
-                sorted_cvs = [size_map[s] for s in sorted_sizes]
-                self._cache[code] = {
-                    "sizes": np.array(sorted_sizes, dtype=np.float64),
-                    "cvs": np.array(sorted_cvs, dtype=np.float64),
-                }
-
-            logger.info(f"CVCache loaded with {len(self._cache)} criterion codes")
-
-        except sqlite3.Error as e:
-            logger.error(f"Database error while loading CV cache: {e}")
-            raise
-
-    @staticmethod
-    def _decompress_results(compressed_data: bytes) -> np.ndarray:
-        """Decompress zstd-compressed results_statistics blob.
-
-        Format: [6-byte header][zstd-compressed 32-bit floats]
-
-        Args:
-            compressed_data: Raw blob from database.
-
-        Returns:
-            Numpy array of float64 values.
-        """
-        if len(compressed_data) < 6:
-            raise ValueError(f"Invalid data: expected at least 6 bytes, got {len(compressed_data)}")
-
-        zstd_data = compressed_data[6:]
-        dctx = zstd.ZstdDecompressor()
-        decompressed = dctx.decompress(zstd_data)
-
-        float_size = 4
-        num_floats = len(decompressed) // float_size
-
-        if num_floats == 0:
-            return np.array([], dtype=np.float64)
-
-        data = struct.unpack(f"{num_floats}f", decompressed[: num_floats * float_size])
-        return np.array(data, dtype=np.float64)
-
-    def get_cv(self, criterion_code: str, sample_size: int) -> float | None:
-        """Retrieve the linearly interpolated critical value for a given test and sample size.
-
-        Args:
-            criterion_code: Name of the statistical test (e.g., "KS_NORMALITY_GOODNESS_OF_FIT")
-            sample_size: Sample size used in Monte Carlo simulation.
-
-        Returns:
-            Linearly interpolated 95th percentile critical value, or None if criterion not found.
-        """
-        code_lower = criterion_code.lower()
-
-        if code_lower not in self._cache:
-            logger.debug(f"Criterion code not in cache: {criterion_code}")
-            return None
-
-        entry = self._cache[code_lower]
-        sizes = entry["sizes"]
-        cvs = entry["cvs"]
-
-        if len(sizes) == 0:
-            return None
-
-        return float(np.interp(sample_size, sizes, cvs))
-
-
 class MLStrategy(AbstractStrategy):
-    """Machine Learning-based strategy using a pre-trained Random Forest classifier.
+    """Classify raw GoF feature vectors using a pre-trained Random Forest."""
 
-    This strategy binarizes raw GoF test results using critical values from Monte
-    Carlo simulations, then uses the trained RF model to predict the most likely
-    distribution with confidence scores.
-
-    Attributes:
-        model: Loaded joblib Random Forest model.
-        cv_cache: Critical value cache for binarization.
-        _class_names: Ordered list of distribution class names expected by the model.
-    """
-
-    def __init__(self, model_path: str | Path, cv_database_path: str | Path):
-        """Initialize the ML strategy with a trained model and critical value database.
-
-        Args:
-            model_path: Path to the trained Random Forest model (joblib format).
-            cv_database_path: Path to the SQLite database with critical values.
-
-        Raises:
-            FileNotFoundError: If either file does not exist.
-            Exception: If model loading fails.
-        """
+    def __init__(self, model_path: str | Path):
+        """Load a trusted model and validate its feature schema."""
         p_model = Path(model_path)
         if not p_model.exists():
             raise FileNotFoundError(f"Model file not found: {p_model}")
 
+        manifest = verify_model_manifest(p_model)
+        self._feature_names = list(manifest["feature_schema"]["names"])
+
         try:
             self.model = load_model(p_model)
-            logger.info(f"Loaded Random Forest model from {model_path}")
-        except Exception as e:
-            logger.error(f"Failed to load model: {e}")
+            validate_loaded_model(self.model, manifest)
+            logger.info("Loaded Random Forest model from %s", model_path)
+        except Exception as exc:
+            logger.error("Failed to load model: %s", exc)
             raise
 
+        model_feature_names = getattr(self.model, "feature_names", None)
+        if model_feature_names != self._feature_names:
+            actual_count = len(model_feature_names) if model_feature_names is not None else 0
+            raise ValueError(
+                "Model feature schema does not match its manifest: "
+                f"expected {len(self._feature_names)}, got {actual_count}"
+            )
+
         self._class_names = sorted(self.model.classes_.tolist())
-        logger.info(f"Model classes: {self._class_names}")
+        logger.info("Model classes: %s", self._class_names)
 
-        self.cv_cache = CVCache(str(cv_database_path))
+    @property
+    def feature_names(self) -> list[str]:
+        """Return the exact ordered schema stored with the loaded model."""
+        feature_names = getattr(self, "_feature_names", None)
+        if feature_names is None:
+            feature_names = getattr(self.model, "feature_names", FeatureVector.FEATURE_NAMES)
+        return list(feature_names)
 
-    def _binarize_vector(self, raw_flat_vector: List[float], sample_size: int) -> np.ndarray:
-        """Binarize raw continuous GoF test results using critical values.
+    @property
+    def required_features(self) -> frozenset[str]:
+        """Return the full-schema columns actually consumed by the loaded model."""
+        if not isinstance(self.model, HierarchicalExpertModel):
+            return frozenset(self.feature_names)
 
-        The vector layout is:
-        - First 6 elements: Continuous statistics (sample_size, skew, kurtosis, etc.)
-        - Remaining elements: GoF test results (to be binarized)
+        selected = set(self.model.stage1_features or [])
+        for features in self.model.stage2_features.values():
+            selected.update(features)
 
-        Binarization logic:
-        - If value <= critical_value: set to 1.0 (hypothesis accepted)
-        - If value > critical_value: set to 0.0 (hypothesis rejected)
-        - If value == -1.0: keep as -1.0 (inapplicable)
-        - Continuous statistics: leave unchanged
+        unknown = selected.difference(self.feature_names)
+        if unknown:
+            raise ValueError(
+                "Model selects features outside its bundled schema: "
+                + ", ".join(sorted(unknown))
+            )
+        return frozenset(selected)
 
-        Args:
-            raw_flat_vector: Raw feature vector from pipeline (continuous values).
-            sample_size: Size of the original sample (used for CV lookup).
-
-        Returns:
-            Binarized numpy array ready for RF model prediction.
-        """
-        binarized = np.array(raw_flat_vector, dtype=np.float64)
-
-        stat_keys = FeatureVector.STAT_KEYS
-        num_stats = len(stat_keys)
-
-        for idx, (dist_name, crit_code) in enumerate(FeatureVector.CRITERIA_SCHEMA):
-            vector_idx = num_stats + idx
-
-            if vector_idx >= len(binarized):
-                logger.warning(f"Vector index {vector_idx} out of bounds")
-                break
-
-            raw_value = binarized[vector_idx]
-
-            if raw_value == -1.0:
-                continue
-
-            criterion_code_upper = crit_code.upper()
-            cv = self.cv_cache.get_cv(criterion_code_upper, sample_size)
-
-            if cv is None:
-                logger.debug(
-                    f"No critical value for {criterion_code_upper} (n={sample_size}), "
-                    f"keeping value as-is"
+    def _hierarchical_evidence(self, X: np.ndarray) -> dict:
+        """Collect actual base-sample forest scores and selected input values."""
+        if not isinstance(self.model, HierarchicalExpertModel):
+            return {}
+        model = self.model
+        frame = pd.DataFrame(X, columns=model.feature_names)
+        stage1_frame = frame[model.stage1_features]
+        stage1_scores = dict(
+            zip(
+                model.stage1_model.classes_,
+                map(float, model.stage1_model.predict_proba(stage1_frame)[0]),
+                strict=True,
+            )
+        )
+        stage2_scores, stage2_features = {}, {}
+        for family, members in model.family_map.items():
+            features = model.stage2_features.get(family, [])
+            stage2_features[family] = frame[features].iloc[0].to_dict()
+            if family in model.stage2_models:
+                forest = model.stage2_models[family]
+                stage2_scores[family] = dict(
+                    zip(
+                        forest.classes_,
+                        map(float, forest.predict_proba(frame[features])[0]),
+                        strict=True,
+                    )
                 )
-                continue
-
-            if raw_value <= cv:
-                binarized[vector_idx] = 1.0
             else:
-                binarized[vector_idx] = 0.0
-
-        return binarized
+                stage2_scores[family] = {members[0]: 1.0}
+        return dict(
+            stage1_scores=stage1_scores,
+            stage2_scores=stage2_scores,
+            stage1_features=stage1_frame.iloc[0].to_dict(),
+            stage2_features=stage2_features,
+        )
 
     def predict_report(
-        self, base_fv: FeatureVector, bootstrap_fvs: List[FeatureVector] | None = None
+        self, base_fv: FeatureVector, bootstrap_fvs: list[FeatureVector] | None = None
     ) -> Report:
-        """Generate the final identification report using the Random Forest model.
-
-        Process:
-        1. Extract raw flat vector from base_fv.
-        2. Determine sample size from base_fv.sample_stats.
-        3. Binarize the vector using critical values.
-        4. Feed to RF model for prediction.
-        5. Extract top winner and probabilities.
-        6. Return Report with confidence from RF probabilities.
-
-        Args:
-            base_fv: FeatureVector calculated on the original sample.
-            bootstrap_fvs: Optional list of FeatureVectors from bootstrap resampling.
-                If provided, used for confidence calculation via voting.
-
-        Returns:
-            Report object with predicted distribution, confidence, and scores.
-        """
-        raw_vector = base_fv.as_flat_list(missing_value=-1.0)
-
-        sample_size = int(base_fv.sample_stats.get("sample_size", 100))
-
-        binarized_vector = self._binarize_vector(raw_vector, sample_size)
-
-        X = binarized_vector.reshape(1, -1)
+        """Generate a recommendation report from raw statistics and optional resamples."""
+        raw_vector = np.asarray(
+            base_fv.as_flat_list(feature_names=self.feature_names), dtype=np.float64
+        )
+        X = raw_vector.reshape(1, -1)
 
         probabilities = self.model.predict_proba(X)[0]
 
         winner_idx = np.argmax(probabilities)
         winner = self._class_names[winner_idx]
-        confidence = float(probabilities[winner_idx])
+        base_confidence = float(probabilities[winner_idx])
 
-        all_scores = {name: float(prob) for name, prob in zip(self._class_names, probabilities)}
+        final_ranks = {
+            name: float(prob) for name, prob in zip(self._class_names, probabilities, strict=True)
+        }
+        confidence_kind = "model_probability"
+        model_ranks = dict(final_ranks)
+        evidence = self._hierarchical_evidence(X)
+        class_name_by_key = {name.lower(): name for name in self._class_names}
+        all_scores: dict[str, dict[str, float]] = {name: {} for name in self._class_names}
+        for vector_idx, feature_name in enumerate(self.feature_names):
+            if "__" not in feature_name:
+                continue
+            dist_name, crit_code = feature_name.split("__", maxsplit=1)
+            class_name = class_name_by_key.get(dist_name)
+            if class_name is None:
+                continue
+            all_scores[class_name][crit_code] = float(raw_vector[vector_idx])
 
+        bootstrap_stability = None
+        bootstrap_ranks = {}
+        bootstrap_successful = 0
         if bootstrap_fvs:
             votes = []
             for fv in bootstrap_fvs:
-                boot_vector = fv.as_flat_list(missing_value=-1.0)
-                boot_sample_size = int(fv.sample_stats.get("sample_size", 100))
-                binarized_boot = self._binarize_vector(boot_vector, boot_sample_size)
-                X_boot = binarized_boot.reshape(1, -1)
+                boot_vector = np.asarray(
+                    fv.as_flat_list(feature_names=self.feature_names), dtype=np.float64
+                )
+                X_boot = boot_vector.reshape(1, -1)
                 boot_pred = self.model.predict(X_boot)[0]
+                if boot_pred not in self._class_names:
+                    raise ValueError(f"Bootstrap predicted an unknown class: {boot_pred!r}")
                 votes.append(boot_pred)
 
-            unique, counts = np.unique(votes, return_counts=True)
-            best_idx = np.argmax(counts)
-            winner = unique[best_idx]
-            confidence = float(counts[best_idx]) / len(votes)
+            vote_counts = {name: votes.count(name) for name in self._class_names}
+            bootstrap_ranks = {name: count / len(votes) for name, count in vote_counts.items()}
+            bootstrap_stability = bootstrap_ranks[winner]
+            bootstrap_successful = len(votes)
 
         return Report(
             distribution_name=winner,
-            confidence=round(confidence, 3),
+            confidence=round(base_confidence, 3),
             all_scores=all_scores,
-            final_ranks=all_scores,
+            final_ranks=final_ranks,
+            model_ranks=model_ranks,
+            **evidence,
+            confidence_kind=confidence_kind,
+            model_confidence=round(base_confidence, 3),
+            bootstrap_ranks=bootstrap_ranks,
+            bootstrap_successful=bootstrap_successful,
+            bootstrap_stability=(
+                round(bootstrap_stability, 3) if bootstrap_stability is not None else None
+            ),
+            sample_statistics=base_fv.descriptive_stats,
         )

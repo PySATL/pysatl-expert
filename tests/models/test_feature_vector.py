@@ -30,6 +30,7 @@ def test_feature_vector_init_filtering(mock_data):
 
     assert "extra_key" not in fv.sample_stats
     assert len(fv.sample_stats) == len(FeatureVector.STAT_KEYS)
+    assert fv.descriptive_stats == stats
     assert "normal" in fv.candidates_scores
     assert "exponential" in fv.candidates_scores
 

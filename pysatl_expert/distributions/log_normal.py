@@ -22,11 +22,11 @@ class LogNormalDistribution(AbstractDistribution):
         return {"s": shape, "loc": 0.0, "scale": scale}
 
     def pdf(self, data: np.ndarray, params: dict) -> np.ndarray:
-        loc = params.get("loc", 0)
+        loc = params["loc"]
         return st.lognorm.pdf(data, s=params["s"], loc=loc, scale=params["scale"])
 
     def cdf(self, data: np.ndarray, params: dict) -> np.ndarray:
-        loc = params.get("loc", 0)
+        loc = params["loc"]
         return st.lognorm.cdf(data, s=params["s"], loc=loc, scale=params["scale"])
 
     def prepare_criterion_input(
@@ -35,8 +35,8 @@ class LogNormalDistribution(AbstractDistribution):
         """Standardize observations for canonical Log-Normal criteria."""
         observations = self._standardize_criterion_input(
             data,
-            params.get("loc", 0.0),
-            params.get("scale", 1.0),
+            params["loc"],
+            params["scale"],
             positive_support=True,
         )
         return observations, {"s": float(params["s"]), "scale": 1.0}

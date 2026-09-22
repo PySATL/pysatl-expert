@@ -31,16 +31,16 @@ class ExponentialDistribution(AbstractDistribution):
         """
         Evaluates the probability density function (PDF).
         """
-        loc = params.get("loc", 0)
-        scale = params.get("scale", 1 / params.get("lambda", 1))
+        loc = params["loc"]
+        scale = params["scale"]
         return st.expon.pdf(data, loc=loc, scale=scale)
 
     def cdf(self, data: np.ndarray, params: dict) -> np.ndarray:
         """
         Evaluates the cumulative distribution function (CDF) for GoF assessment.
         """
-        loc = params.get("loc", 0)
-        scale = params.get("scale", 1 / params.get("lambda", 1))
+        loc = params["loc"]
+        scale = params["scale"]
         return st.expon.cdf(data, loc=loc, scale=scale)
 
     def prepare_criterion_input(
@@ -49,8 +49,8 @@ class ExponentialDistribution(AbstractDistribution):
         """Standardize observations for canonical Exponential criteria."""
         observations = self._standardize_criterion_input(
             data,
-            params.get("loc", 0.0),
-            params.get("scale", 1.0),
+            params["loc"],
+            params["scale"],
             positive_support=True,
         )
         return observations, {"lam": 1.0}

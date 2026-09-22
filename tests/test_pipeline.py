@@ -54,6 +54,21 @@ class TestDistributionPipeline:
         assert len(valid) == 1
         assert valid[0] == dist_in
 
+    @pytest.mark.parametrize(
+        ("data", "message"),
+        [
+            (np.array([]), "non-empty"),
+            (np.array([[1.0, 2.0]]), "one-dimensional"),
+            (np.array([1.0, np.inf]), "finite"),
+            (np.array([2.0, 2.0, 2.0]), "non-constant"),
+        ],
+    )
+    def test_evaluate_sample_rejects_invalid_input(self, mock_components, data, message):
+        pipeline = DistributionPipeline(mock_components)
+
+        with pytest.raises(ValueError, match=message):
+            pipeline._evaluate_sample(data)
+
     def test_evaluate_sample_success(self, mock_components):
         pipeline = DistributionPipeline(mock_components)
         data = np.array([10, 0, 5])
@@ -109,6 +124,31 @@ class TestDistributionPipeline:
         args, _ = mock_components.strategy.predict_report.call_args
         assert len(args[1]) == 0
         assert report.parameters == (0, 1)
+        assert report.candidate_parameters == {"Normal": (0, 1)}
+
+    def test_identify_best_default_does_not_resample(self, mock_components):
+        pipeline = DistributionPipeline(mock_components)
+        with patch.object(pipeline, "_evaluate_sample", return_value=(MagicMock(), {})) as evaluate:
+            report = pipeline.identify_best(np.array([1, 2, 3]))
+        assert evaluate.call_count == 1
+        assert report.bootstrap_requested == 0
+        assert report.bootstrap_successful == 0
+
+    def test_identify_best_records_partial_and_failed_bootstrap(self, mock_components, caplog):
+        pipeline = DistributionPipeline(mock_components)
+        with patch.object(pipeline, "_evaluate_sample") as evaluate:
+            evaluate.side_effect = [
+                (MagicMock(), {}),
+                (MagicMock(), {}),
+                ValueError("resample failure"),
+            ]
+            report = pipeline.identify_best(np.array([1, 2, 3]), n_bootstraps=2)
+        assert report.bootstrap_requested == 2
+        assert report.bootstrap_successful == 1
+        assert "resample failure" in caplog.text
+        assert report.bootstrap_errors == [
+            "Bootstrap iteration 1 failed: ValueError: resample failure"
+        ]
 
     def test_identify_best_params_not_found(self, mock_components):
         report_mock = MagicMock()
@@ -124,6 +164,9 @@ class TestDistributionPipeline:
         assert report.parameters is None
 
     def test_identify_best_bootstrap_exception(self, mock_components):
+        from pysatl_expert.models.report import Report
+
+        mock_components.strategy.predict_report.return_value = Report("Normal", 0.75, {})
         pipeline = DistributionPipeline(mock_components)
         data = np.array([1, 2, 3])
 
@@ -137,6 +180,21 @@ class TestDistributionPipeline:
 
             assert mocked_eval.call_count == 2
             assert report.distribution_name == "Normal"
+            assert report.bootstrap_requested == 1
+            assert report.bootstrap_successful == 0
+            assert report.bootstrap_stability is None
+            assert report.bootstrap_ranks == {}
+
+    def test_identify_best_bootstrap_uses_requested_random_seed(self, mock_components):
+        pipeline = DistributionPipeline(mock_components)
+        data = np.array([1, 2, 3])
+
+        with patch("pysatl_expert.pipeline.np.random.default_rng") as rng_factory:
+            rng_factory.return_value.choice.return_value = data
+            pipeline.identify_best(data, n_bootstraps=2, random_state=17)
+
+        rng_factory.assert_called_once_with(17)
+        assert rng_factory.return_value.choice.call_count == 2
 
     def test_evaluate_sample_no_valid_distributions(self, mock_components):
         for dist in mock_components.distributions:

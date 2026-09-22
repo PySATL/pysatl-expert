@@ -5,9 +5,15 @@ description = "PySATL expert system"
 authors = ["PySATL Team <pysatl@yahoo.com>"]
 license = "MIT"
 readme = "README.md"
-homepage = "https://github.com/PySATL/pysatl-expert"
-repository = "https://github.com/PySATL/pysatl-expert"
 packages = [{include = "pysatl_expert"}]
+exclude = [
+    "pysatl_expert/config",
+    "pysatl_expert/models/feature_selection_contract.py",
+]
+
+[tool.poetry.urls]
+Homepage = "https://github.com/PySATL/pysatl-expert"
+Repository = "https://github.com/PySATL/pysatl-expert"
 
 [[tool.poetry.source]]
 name = "testpypi"
@@ -20,9 +26,13 @@ numpy = ">=1.25.1"
 scipy = ">=1.11.2"
 pandas = ">=2.2.1"
 typing-extensions = ">=4.12.2"
-pysatl-criterion = { version = "*", source = "testpypi" }
-tqdm = "^4.67.3"
+pysatl-criterion = { git = "https://github.com/PySATL/pysatl-criterion.git", branch = "main" }
 scikit-learn = ">=1.4.0,<1.7.0"
+joblib = ">=1.3.0"
+matplotlib = ">=3.8.0"
+
+[tool.poetry.scripts]
+pysatl-expert = "pysatl_expert.cli:entrypoint"
 
 [tool.poetry.group.dev.dependencies]
 markdown = "3.7"
