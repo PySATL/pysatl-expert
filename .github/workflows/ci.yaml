@@ -1,21 +1,38 @@
-name: CI
+name: PySATL CI
 
 on:
   pull_request:
   push:
-    branches: [main]
+    branches:
+      - main
+  release:
+    types: [published]
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  MPLBACKEND: Agg
+
 jobs:
   quality:
+    name: Quality checks
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -23,16 +40,119 @@ jobs:
         run: pip install poetry==2.1.1
 
       - name: Install dependencies
-        run: poetry install --with dev
+        run: poetry install --with dev --no-interaction
 
-      - name: Lint
-        run: poetry run ruff check .
+      - name: Validate project metadata and lock file
+        run: poetry check --lock
 
-      - name: Test
-        run: poetry run pytest --ignore=tests/benchmarks
+      - name: Run Ruff lint
+        run: poetry run ruff check . --output-format=github
 
-      - name: Build package
+      - name: Check formatting with Ruff
+        run: poetry run ruff format --check .
+
+      - name: Run mypy
+        run: poetry run mypy pysatl_expert tests scripts
+
+      - name: Check patch formatting
+        run: git diff --check
+
+  test:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Poetry
+        run: pip install poetry==2.1.1
+
+      - name: Install dependencies
+        run: poetry install --with dev --no-interaction
+
+      - name: Run tests
+        run: poetry run pytest --random-order --ignore=tests/benchmarks
+
+  pre-commit:
+    name: Pre-commit hooks
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Run pre-commit
+        uses: pre-commit/action@v3.0.1
+
+  build:
+    name: Build package
+    needs: [quality, test, pre-commit]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        run: pip install poetry==2.1.1
+
+      - name: Build distribution
         run: poetry build
 
-      - name: Check diff formatting
-        run: git diff --check
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: pysatl-expert-build
+          path: dist/
+          if-no-files-found: error
+          retention-days: 10
+
+  deploy-pypi:
+    name: Publish package to PyPI
+    if: github.event_name == 'release'
+    needs: [build]
+    runs-on: ubuntu-22.04
+    environment:
+      name: pypi
+      url: https://pypi.org/project/pysatl-expert/
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download package artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: pysatl-expert-build
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@v1.14.2
