@@ -166,3 +166,24 @@ cache.json
 local_tests.py
 requirements.txt
 requirements-dev.txt
+
+# Generated ML datasets, models, and databases
+*.sqlite
+*.sqlite-journal
+*.joblib
+/artifacts/
+
+# Local inference and report outputs
+/sample.csv
+/output/
+/tmp/
+/result_Sample_*.pdf
+/result_Sample_*.png
+/test_*.png
+
+# Local working notes (not part of the distribution)
+context.md
+work.md
+STRUCTURE.md
+/presentation/
+/tasks/

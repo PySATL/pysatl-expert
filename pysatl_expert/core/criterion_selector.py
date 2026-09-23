@@ -1,27 +1,26 @@
+"""Abstract criterion selector interface module."""
+
 from abc import ABC, abstractmethod
 
 from pysatl_expert.core.criterion import AbstractCriterion
 
 
 class AbstractCriterionSelector(ABC):
-    """
-    Defines the interface for components responsible for the dynamic selection
-    of statistical Goodness-of-Fit (GoF) tests.
+    """Base interface for dynamic selection of Goodness-of-Fit tests.
+
+    Filters and selects statistical tests applicable to a given sample and candidate distribution.
     """
 
     @abstractmethod
     def get_applicable_criteria(self, data, distribution) -> list[AbstractCriterion]:
-        """
-        Determines and returns a list of GoF criteria suitable for the provided context.
+        """Determine and return GoF criteria suitable for the provided sample and distribution.
 
         Args:
-            data (np.ndarray): The numerical sample used to assess sample size
-                and data range constraints.
-            distribution (AbstractDistribution): The specific distribution model
-                currently being evaluated.
+            data (np.ndarray): Numerical sample used to assess size and range constraints.
+            distribution (AbstractDistribution): Candidate distribution model being evaluated.
 
         Returns:
-            list[AbstractCriterion]: A collection of criterion objects ready
-                to perform the 'calculate' operation.
+            list[AbstractCriterion]: Collection of applicable criterion instances ready
+                for execution.
         """
         pass

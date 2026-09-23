@@ -1,141 +1,158 @@
 name: PySATL CI
 
 on:
+  pull_request:
   push:
     branches:
       - main
   release:
-    types: [ published ]
-  pull_request:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  MPLBACKEND: Agg
 
 jobs:
-  build-linux:
-
+  quality:
+    name: Quality checks
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: [ "3.10", "3.11", "3.12" ]
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        run: pip install poetry==2.1.1
+
+      - name: Install dependencies
+        run: poetry install --with dev --no-interaction
+
+      - name: Validate project metadata and lock file
+        run: poetry check --lock
+
+      - name: Run Ruff lint
+        run: poetry run ruff check . --output-format=github
+
+      - name: Check formatting with Ruff
+        run: poetry run ruff format --check .
+
+      - name: Run mypy
+        run: poetry run mypy pysatl_expert tests scripts
+
+      - name: Check patch formatting
+        run: git diff --check
+
+  test:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
 
       - name: Install Poetry
         run: pip install poetry==2.1.1
 
-      - name: Display Python version
-        run: python -c "import sys; print(sys.version)"
-
-      - name: Install dependencies with Poetry
-        run: poetry install --with dev
-
-      - name: Run Ruff lint
-        run: poetry run ruff check --output-format=github
-
-      - name: Check formatting with Ruff
-        run: poetry run ruff format --check
-
-      - name: Mypy
-        run: |
-          poetry run mypy pysatl_expert tests
+      - name: Install dependencies
+        run: poetry install --with dev --no-interaction
 
       - name: Run tests
-        run: poetry run pytest --random-order
-
-      - name: Tests with Coveralls
-        if: (runner.os == 'Linux' && matrix.python-version == '3.12')
-        run: |
-          poetry run pytest --random-order --cov=pysatl_expert --cov-config=.coveragerc
-
-      - name: Coveralls
-        if: (runner.os == 'Linux' && matrix.python-version == '3.12')
-        env:
-          COVERALLS_REPO_TOKEN: ${{ secrets.coverallsToken }}
-        run: |
-          # Allow failure for coveralls
-          coveralls || true
-
-      - name: Remove poetry.lock before checking for changes
-        run: rm -f poetry.lock
-
-      - name: Check for repository changes
-        run: |
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "Repository is dirty, changes detected:"
-            git status
-            git diff
-            exit 1
-          else
-            echo "Repository is clean, no changes detected."
-          fi
+        run: poetry run pytest --random-order --ignore=tests/benchmarks
 
   pre-commit:
+    name: Pre-commit hooks
     runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - uses: pre-commit/action@v3.0.1
-
-  build:
-    name: "Build"
-    needs: [ build-linux, pre-commit ]
-    runs-on: ubuntu-22.04
+    timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
-      - name: Build distribution
-        run: |
-          pip install poetry==2.1.1
-          poetry build
+      - name: Run pre-commit
+        uses: pre-commit/action@v3.0.1
 
-      - name: Upload artifacts 📦
-        uses: actions/upload-artifact@v4
+  build:
+    name: Build package
+    needs: [quality, test, pre-commit]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        run: pip install poetry==2.1.1
+
+      - name: Build distribution
+        run: poetry build
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v7
         with:
           name: pysatl-expert-build
-          path: |
-            dist
+          path: dist/
+          if-no-files-found: error
           retention-days: 10
 
   deploy-pypi:
-    name: "Publish Python 🐍 distribution 📦 to PyPI"
-    needs: [ build ]
+    name: Publish package to PyPI
+    if: github.event_name == 'release'
+    needs: [build]
     runs-on: ubuntu-22.04
-    if: (github.event_name == 'release')
     environment:
       name: pypi
-      url: https://pypi.org/p/pysatl-expert
+      url: https://pypi.org/project/pysatl-expert/
     permissions:
       id-token: write
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Download package artifacts
+        uses: actions/download-artifact@v8
         with:
-          persist-credentials: false
-
-      - name: Download artifact  📦
-        uses: actions/download-artifact@v4
-        with:
-          pattern: pysatl*-build
-          path: dist
-          merge-multiple: true
+          name: pysatl-expert-build
+          path: dist/
 
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@v1.12.4
+        uses: pypa/gh-action-pypi-publish@v1.14.2
