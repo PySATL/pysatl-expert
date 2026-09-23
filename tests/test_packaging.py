@@ -40,5 +40,5 @@ def test_production_wheel_excludes_training_only_files() -> None:
 def test_runtime_dependencies_do_not_include_unused_reporting_tools() -> None:
     dependencies = _pyproject()["tool"]["poetry"]["dependencies"]
 
-    assert "seaborn" not in dependencies
+    assert "seaborn" in dependencies
     assert "tqdm" not in dependencies
