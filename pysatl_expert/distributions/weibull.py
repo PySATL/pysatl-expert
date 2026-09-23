@@ -48,9 +48,7 @@ class WeibullDistribution(AbstractDistribution):
         loc = params["loc"]
         return st.weibull_min.cdf(data, c=params["shape"], loc=loc, scale=params["scale"])
 
-    def prepare_criterion_input(
-        self, data: np.ndarray, params: dict
-    ) -> tuple[np.ndarray, dict]:
+    def prepare_criterion_input(self, data: np.ndarray, params: dict) -> tuple[np.ndarray, dict]:
         """Standardize observations for canonical Weibull criteria."""
         observations = self._standardize_criterion_input(
             data,

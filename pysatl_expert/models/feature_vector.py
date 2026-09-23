@@ -1,7 +1,4 @@
-from pysatl_expert.criteria.catalog import (
-    CRITERIA_SPECS,
-    RAW_CRITERIA_EXCLUSIONS,
-)
+from pysatl_expert.criteria.catalog import CRITERIA_SPECS, RAW_CRITERIA_EXCLUSIONS
 
 
 _NUMERICALLY_UNSTABLE_TRAINING_FEATURES = frozenset(RAW_CRITERIA_EXCLUSIONS)
@@ -74,9 +71,7 @@ class FeatureVector:
                 value = self.sample_stats.get(feature_name, missing_value)
             elif "__" in feature_name:
                 distribution, criterion = feature_name.split("__", maxsplit=1)
-                value = self.candidates_scores.get(distribution, {}).get(
-                    criterion, missing_value
-                )
+                value = self.candidates_scores.get(distribution, {}).get(criterion, missing_value)
             else:
                 value = missing_value
             values.append(float(value))

@@ -66,7 +66,10 @@ def test_plot_report_writes_png_and_closes_figure(tmp_path):
     from pysatl_expert.reporting.plot import generate_plot_report
 
     report = Report(
-        "Normal", 0.8, {}, parameters={"mu": 0.0, "std": 1.0},
+        "Normal",
+        0.8,
+        {},
+        parameters={"mu": 0.0, "std": 1.0},
         final_ranks={"Normal": 0.8, "Student": 0.2},
     )
     initial_figures = plt.get_fignums()
@@ -76,9 +79,7 @@ def test_plot_report_writes_png_and_closes_figure(tmp_path):
     assert plt.get_fignums() == initial_figures
 
 
-def test_plot_report_does_not_draw_a_fitted_curve_without_fitted_parameters(
-    tmp_path, monkeypatch
-):
+def test_plot_report_does_not_draw_a_fitted_curve_without_fitted_parameters(tmp_path, monkeypatch):
     from matplotlib.axes import Axes
 
     from pysatl_expert.reporting.plot import generate_plot_report
@@ -96,6 +97,5 @@ def test_plot_report_does_not_draw_a_fitted_curve_without_fitted_parameters(
     generate_plot_report(np.linspace(-2.0, 2.0, 20), report, tmp_path / "report.png")
 
     assert all(
-        label is None or ("Fitted" not in label and "Theoretical" not in label)
-        for label in labels
+        label is None or ("Fitted" not in label and "Theoretical" not in label) for label in labels
     )

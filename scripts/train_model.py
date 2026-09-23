@@ -4,6 +4,7 @@ import argparse
 import json
 import logging
 from pathlib import Path
+from typing import cast
 
 import joblib
 import numpy as np
@@ -13,10 +14,7 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 from pysatl_expert.models.feature_selection_contract import validate_selection_document
 from pysatl_expert.models.feature_vector import FeatureVector
 from pysatl_expert.models.hierarchical_model import HierarchicalExpertModel
-from pysatl_expert.models.model_manifest import (
-    manifest_path_for,
-    write_model_manifest,
-)
+from pysatl_expert.models.model_manifest import manifest_path_for, write_model_manifest
 from scripts.training_data import load_frozen_training_dataset
 
 
@@ -74,17 +72,11 @@ def prepare_training_data(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
     expected_features = FeatureVector.FEATURE_NAMES
     missing_features = sorted(set(expected_features) - set(actual_features))
     if missing_features:
-        raise ValueError(
-            "Dataset is missing active features: " + ", ".join(missing_features)
-        )
+        raise ValueError("Dataset is missing active features: " + ", ".join(missing_features))
     extra_features = set(actual_features) - set(expected_features)
-    unexpected_features = sorted(
-        extra_features - FeatureVector.EXCLUDED_TRAINING_FEATURES
-    )
+    unexpected_features = sorted(extra_features - FeatureVector.EXCLUDED_TRAINING_FEATURES)
     if unexpected_features:
-        raise ValueError(
-            "Dataset contains unexpected features: " + ", ".join(unexpected_features)
-        )
+        raise ValueError("Dataset contains unexpected features: " + ", ".join(unexpected_features))
 
     features = df[expected_features].replace([np.inf, -np.inf], np.nan)
     return features, df["Target"]
@@ -98,9 +90,7 @@ def load_training_dataset(
 ) -> pd.DataFrame:
     """Load only active float32 features, optionally taking a balanced class prefix."""
     selected_columns = [*FeatureVector.FEATURE_NAMES, "Target"]
-    numeric_dtypes = {
-        feature_name: np.float32 for feature_name in FeatureVector.FEATURE_NAMES
-    }
+    numeric_dtypes = {feature_name: np.float32 for feature_name in FeatureVector.FEATURE_NAMES}
     read_options = {
         "usecols": selected_columns,
         "dtype": numeric_dtypes,
@@ -120,8 +110,7 @@ def load_training_dataset(
             selected_parts.append(selected)
             selected_counts[target_name] = selected_counts.get(target_name, 0) + len(selected)
         if expected_targets and all(
-            selected_counts.get(target, 0) >= samples_per_class
-            for target in expected_targets
+            selected_counts.get(target, 0) >= samples_per_class for target in expected_targets
         ):
             break
 
@@ -259,14 +248,10 @@ def main(argv: list[str] | None = None):
         "estimators": args.estimators,
         "workers": args.workers,
         "selected_features": str(features_path),
-        "stage1_feature_count": len(
-            feature_selection["selection"]["stage1_features"]
-        ),
+        "stage1_feature_count": len(feature_selection["selection"]["stage1_features"]),
         "stage2_feature_count": {
             family: len(features)
-            for family, features in feature_selection["selection"][
-                "stage2_features"
-            ].items()
+            for family, features in feature_selection["selection"]["stage2_features"].items()
         },
         "test_size": feature_selection["split"]["test_size"],
         "random_state": feature_selection["split"]["random_state"],
@@ -298,12 +283,11 @@ def main(argv: list[str] | None = None):
     hierarchical_metrics["stage2_features"] = model.stage2_features
     hierarchical_metrics.update(evaluate_hierarchical_stages(model, X_test, y_test))
     metrics["hierarchical_random_forest"] = hierarchical_metrics
+    stage1_metrics = cast(dict[str, object], hierarchical_metrics["stage1_family"])
+    stage1_accuracy = cast(float, stage1_metrics["accuracy"])
 
     logger.info(f"Overall Test Accuracy: {acc * 100:.2f}%")
-    logger.info(
-        "Stage 1 Family Accuracy: "
-        f"{hierarchical_metrics['stage1_family']['accuracy'] * 100:.2f}%"
-    )
+    logger.info(f"Stage 1 Family Accuracy: {stage1_accuracy * 100:.2f}%")
     logger.info(
         "Classification Report:\n"
         + classification_report(y_test, y_pred, digits=4, zero_division=0)

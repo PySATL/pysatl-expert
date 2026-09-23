@@ -4,11 +4,7 @@ import numpy as np
 import pytest
 
 from pysatl_expert.core.pipeline_components import PipelineComponents
-from pysatl_expert.criteria.catalog import (
-    CRITERIA_REGISTRY,
-    CRITERIA_SPECS,
-    CriterionSpec,
-)
+from pysatl_expert.criteria.catalog import CRITERIA_REGISTRY, CRITERIA_SPECS, CriterionSpec
 from pysatl_expert.criteria.selectors.selector import CriterionSelector
 from pysatl_expert.distributions.normal import NormalDistribution
 from pysatl_expert.models.feature_extractor import FeatureExtractor

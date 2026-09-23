@@ -43,9 +43,7 @@ class ExponentialDistribution(AbstractDistribution):
         scale = params["scale"]
         return st.expon.cdf(data, loc=loc, scale=scale)
 
-    def prepare_criterion_input(
-        self, data: np.ndarray, params: dict
-    ) -> tuple[np.ndarray, dict]:
+    def prepare_criterion_input(self, data: np.ndarray, params: dict) -> tuple[np.ndarray, dict]:
         """Standardize observations for canonical Exponential criteria."""
         observations = self._standardize_criterion_input(
             data,

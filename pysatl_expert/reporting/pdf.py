@@ -86,10 +86,14 @@ def _render_pdf_summary_card(
         f"Mean = {st['mean']:.3f}   |   Std Dev = {st['standard_deviation']:.3f}"
     )
 
-    rows = [["Recommendation", f"{winner.upper()}"], [
-        "Model Confidence",
-        f"{model_score_text}  (model score; not a calibrated probability)",
-    ], ["Bootstrap", _bootstrap_comparison(report)[1]]]
+    rows = [
+        ["Recommendation", f"{winner.upper()}"],
+        [
+            "Model Confidence",
+            f"{model_score_text}  (model score; not a calibrated probability)",
+        ],
+        ["Bootstrap", _bootstrap_comparison(report)[1]],
+    ]
     if report.bootstrap_stability is not None:
         rows.append(
             [
@@ -409,8 +413,18 @@ def generate_pdf_report(
     data_arr = np.asarray(data, dtype=float)
     stats_dict = report.sample_statistics
     required_statistics = {
-        "sample_size", "min", "max", "mean", "median", "standard_deviation", "variance",
-        "skew", "kurtosis", "iqr", "relative_iqr", "entropy",
+        "sample_size",
+        "min",
+        "max",
+        "mean",
+        "median",
+        "standard_deviation",
+        "variance",
+        "skew",
+        "kurtosis",
+        "iqr",
+        "relative_iqr",
+        "entropy",
     }
     missing_statistics = required_statistics.difference(stats_dict)
     if missing_statistics:

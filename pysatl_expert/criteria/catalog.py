@@ -4,10 +4,9 @@ import inspect
 from dataclasses import dataclass
 
 from pysatl_criterion.distribution.distribution_type import DistributionType
+from pysatl_criterion.statistics import AbstractGoodnessOfFitStatistic
 from pysatl_criterion.statistics.goodness_of_fit.beta import AbstractBetaGofStatistic
-from pysatl_criterion.statistics.goodness_of_fit.exponent import (
-    AbstractExponentialityGofStatistic,
-)
+from pysatl_criterion.statistics.goodness_of_fit.exponent import AbstractExponentialityGofStatistic
 from pysatl_criterion.statistics.goodness_of_fit.gamma import AbstractGammaGofStatistic
 from pysatl_criterion.statistics.goodness_of_fit.laplace import AbstractLaplaceGofStatistic
 from pysatl_criterion.statistics.goodness_of_fit.log_normal import AbstractLogNormalGofStatistic
@@ -18,7 +17,7 @@ from pysatl_criterion.statistics.goodness_of_fit.weibull import AbstractWeibullG
 from pysatl_criterion.utils.statistic import get_available_criteria_codes
 
 
-DISTRIBUTION_BASES = {
+DISTRIBUTION_BASES: dict[str, tuple[DistributionType, type[AbstractGoodnessOfFitStatistic]]] = {
     "normal": (DistributionType.NORMAL, AbstractNormalityGofStatistic),
     "exponential": (DistributionType.EXPONENTIAL, AbstractExponentialityGofStatistic),
     "weibull": (DistributionType.WEIBULL, AbstractWeibullGofStatistic),
@@ -83,7 +82,7 @@ class CriterionSpec:
 
     distribution: str
     short_code: str
-    statistic_class: type
+    statistic_class: type[AbstractGoodnessOfFitStatistic]
 
     @property
     def feature_name(self) -> str:
@@ -101,7 +100,9 @@ class SkippedCriterion:
     reason: str
 
 
-def _all_subclasses(base_class: type) -> set[type]:
+def _all_subclasses(
+    base_class: type[AbstractGoodnessOfFitStatistic],
+) -> set[type[AbstractGoodnessOfFitStatistic]]:
     subclasses = set(base_class.__subclasses__())
     for subclass in tuple(subclasses):
         subclasses.update(_all_subclasses(subclass))
@@ -109,12 +110,11 @@ def _all_subclasses(base_class: type) -> set[type]:
 
 
 def _available_classes(
-    distribution_type: DistributionType, base_class: type
-) -> dict[str, type]:
-    available_codes = {
-        code.lower() for code in get_available_criteria_codes(distribution_type)
-    }
-    resolved = {}
+    distribution_type: DistributionType,
+    base_class: type[AbstractGoodnessOfFitStatistic],
+) -> dict[str, type[AbstractGoodnessOfFitStatistic]]:
+    available_codes = {code.lower() for code in get_available_criteria_codes(distribution_type)}
+    resolved: dict[str, type[AbstractGoodnessOfFitStatistic]] = {}
     classes = sorted(
         _all_subclasses(base_class),
         key=lambda statistic_class: (
@@ -132,13 +132,14 @@ def _available_classes(
 
 
 def _discover_catalog() -> tuple[list[CriterionSpec], list[SkippedCriterion]]:
-    active = []
-    skipped = []
+    active: list[CriterionSpec] = []
+    skipped: list[SkippedCriterion] = []
     for distribution, (distribution_type, base_class) in DISTRIBUTION_BASES.items():
         for short_code, statistic_class in sorted(
             _available_classes(distribution_type, base_class).items()
         ):
             feature_name = f"{distribution}__{short_code}"
+            reason: str | None
             if short_code in GLOBAL_BLACKLIST:
                 reason = (
                     "pending_validation"
@@ -159,9 +160,7 @@ def _discover_catalog() -> tuple[list[CriterionSpec], list[SkippedCriterion]]:
                     )
                 )
 
-    laplace_classes = _available_classes(
-        DistributionType.LAPLACE, AbstractLaplaceGofStatistic
-    )
+    laplace_classes = _available_classes(DistributionType.LAPLACE, AbstractLaplaceGofStatistic)
     skipped.extend(
         SkippedCriterion(
             "laplace",
@@ -177,12 +176,8 @@ def _discover_catalog() -> tuple[list[CriterionSpec], list[SkippedCriterion]]:
 
 
 CRITERIA_SPECS, SKIPPED_CRITERIA = _discover_catalog()
-CRITERIA_SPEC_BY_KEY = {
-    (spec.distribution, spec.short_code): spec for spec in CRITERIA_SPECS
-}
+CRITERIA_SPEC_BY_KEY = {(spec.distribution, spec.short_code): spec for spec in CRITERIA_SPECS}
 CRITERIA_REGISTRY = {
-    distribution: tuple(
-        spec for spec in CRITERIA_SPECS if spec.distribution == distribution
-    )
+    distribution: tuple(spec for spec in CRITERIA_SPECS if spec.distribution == distribution)
     for distribution in DISTRIBUTION_BASES
 }

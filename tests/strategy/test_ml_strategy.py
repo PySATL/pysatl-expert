@@ -147,9 +147,7 @@ def test_ml_strategy_verifies_manifest_before_loading_model(tmp_path, monkeypatc
     assert calls == ["verify", "load", "validate"]
 
 
-def test_ml_strategy_does_not_deserialize_model_when_manifest_is_invalid(
-    tmp_path, monkeypatch
-):
+def test_ml_strategy_does_not_deserialize_model_when_manifest_is_invalid(tmp_path, monkeypatch):
     model_path = tmp_path / "model.joblib"
     model_path.write_bytes(b"placeholder")
     loaded = False
@@ -161,9 +159,7 @@ def test_ml_strategy_does_not_deserialize_model_when_manifest_is_invalid(
         nonlocal loaded
         loaded = True
 
-    monkeypatch.setattr(
-        "pysatl_expert.strategy.ml_strategy.verify_model_manifest", reject
-    )
+    monkeypatch.setattr("pysatl_expert.strategy.ml_strategy.verify_model_manifest", reject)
     monkeypatch.setattr("pysatl_expert.strategy.ml_strategy.load_model", load)
 
     with pytest.raises(ModelCompatibilityError, match="SHA-256"):
@@ -183,9 +179,7 @@ def test_ml_strategy_uses_the_model_bundle_feature_schema(tmp_path, monkeypatch)
         "pysatl_expert.strategy.ml_strategy.verify_model_manifest",
         lambda *_: {"feature_schema": {"names": BundledModel.feature_names}},
     )
-    monkeypatch.setattr(
-        "pysatl_expert.strategy.ml_strategy.validate_loaded_model", lambda *_: None
-    )
+    monkeypatch.setattr("pysatl_expert.strategy.ml_strategy.validate_loaded_model", lambda *_: None)
     monkeypatch.setattr("pysatl_expert.strategy.ml_strategy.load_model", lambda _: BundledModel())
 
     strategy = MLStrategy(model_path)

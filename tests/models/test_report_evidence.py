@@ -5,10 +5,7 @@ from pysatl_expert.models.feature_vector import FeatureVector
 from pysatl_expert.models.hierarchical_model import HierarchicalExpertModel
 from pysatl_expert.models.report import Report
 from pysatl_expert.reporting.formatting import format_raw_statistic
-from pysatl_expert.reporting.pdf import (
-    _bootstrap_comparison,
-    _fitted_candidate_curves,
-)
+from pysatl_expert.reporting.pdf import _bootstrap_comparison, _fitted_candidate_curves
 from pysatl_expert.strategy.ml_strategy import MLStrategy
 
 

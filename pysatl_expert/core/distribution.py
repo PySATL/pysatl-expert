@@ -71,9 +71,7 @@ class AbstractDistribution(ABC):
         """
         pass
 
-    def prepare_criterion_input(
-        self, data: np.ndarray, params: dict
-    ) -> tuple[np.ndarray, dict]:
+    def prepare_criterion_input(self, data: np.ndarray, params: dict) -> tuple[np.ndarray, dict]:
         """Prepare observations and parameters for a criterion engine."""
         return np.asarray(data, dtype=float), params
 
@@ -97,15 +95,10 @@ class AbstractDistribution(ABC):
         if not positive_support:
             return standardized
 
-        tolerance = (
-            np.finfo(float).eps
-            * max(1.0, float(np.max(np.abs(standardized))))
-            * 16
-        )
+        tolerance = np.finfo(float).eps * max(1.0, float(np.max(np.abs(standardized)))) * 16
         minimum = float(np.min(standardized))
         if minimum < -tolerance:
             raise ValueError(
-                f"Estimated loc={float(loc)} exceeds the sample minimum for "
-                f"{distribution_name}"
+                f"Estimated loc={float(loc)} exceeds the sample minimum for " f"{distribution_name}"
             )
         return np.maximum(standardized, np.nextafter(0.0, 1.0))

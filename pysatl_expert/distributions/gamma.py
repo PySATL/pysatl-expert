@@ -29,9 +29,7 @@ class GammaDistribution(AbstractDistribution):
         loc = params["loc"]
         return st.gamma.cdf(data, a=params["shape"], loc=loc, scale=params["scale"])
 
-    def prepare_criterion_input(
-        self, data: np.ndarray, params: dict
-    ) -> tuple[np.ndarray, dict]:
+    def prepare_criterion_input(self, data: np.ndarray, params: dict) -> tuple[np.ndarray, dict]:
         """Standardize observations for canonical Gamma criteria."""
         observations = self._standardize_criterion_input(
             data,

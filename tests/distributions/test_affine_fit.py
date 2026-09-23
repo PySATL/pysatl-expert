@@ -48,12 +48,8 @@ def test_location_scale_fit_is_affine_equivariant(distribution):
         assert transformed["mu"] == pytest.approx(factor * base["mu"] + offset)
         assert transformed["std"] == pytest.approx(factor * base["std"])
     elif distribution.name == "Uniform":
-        assert transformed["a"] == pytest.approx(
-            factor * base["a"] + offset, rel=1e-12, abs=1e-12
-        )
-        assert transformed["b"] == pytest.approx(
-            factor * base["b"] + offset, rel=1e-12, abs=1e-12
-        )
+        assert transformed["a"] == pytest.approx(factor * base["a"] + offset, rel=1e-12, abs=1e-12)
+        assert transformed["b"] == pytest.approx(factor * base["b"] + offset, rel=1e-12, abs=1e-12)
     else:
         assert transformed["loc"] == pytest.approx(factor * base["loc"] + offset)
         assert transformed["scale"] == pytest.approx(factor * base["scale"], rel=1e-7)
@@ -61,7 +57,6 @@ def test_location_scale_fit_is_affine_equivariant(distribution):
         shape_keys = set(base) - {"loc", "scale", "lambda"}
         for key in shape_keys:
             assert transformed[key] == pytest.approx(base[key], rel=1e-7)
-
 
 
 @pytest.mark.parametrize(

@@ -79,9 +79,7 @@ def test_generate_pdf_report_handles_empty_scores_and_none_parameters(sample_dat
     assert result_path.stat().st_size > 3000
 
 
-def test_pdf_full_mode_adds_only_selected_feature_inputs(
-    sample_data, tmp_path, monkeypatch
-):
+def test_pdf_full_mode_adds_only_selected_feature_inputs(sample_data, tmp_path, monkeypatch):
     from matplotlib.backends.backend_pdf import PdfPages
 
     pages = []

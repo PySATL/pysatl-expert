@@ -52,11 +52,7 @@ class NormalDistribution(AbstractDistribution):
         """
         return st.norm.cdf(data, loc=params["mu"], scale=params["std"])
 
-    def prepare_criterion_input(
-        self, data: np.ndarray, params: dict
-    ) -> tuple[np.ndarray, dict]:
+    def prepare_criterion_input(self, data: np.ndarray, params: dict) -> tuple[np.ndarray, dict]:
         """Standardize observations for canonical Normal criteria."""
-        observations = self._standardize_criterion_input(
-            data, params["mu"], params["std"]
-        )
+        observations = self._standardize_criterion_input(data, params["mu"], params["std"])
         return observations, {"mean": 0.0, "var": 1.0}

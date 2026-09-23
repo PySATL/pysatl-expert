@@ -37,7 +37,13 @@ def generate_text_report(data: np.ndarray, report: Report) -> str:
     del data
     sample_statistics = report.sample_statistics
     required_statistics = {
-        "sample_size", "min", "max", "mean", "standard_deviation", "skew", "kurtosis"
+        "sample_size",
+        "min",
+        "max",
+        "mean",
+        "standard_deviation",
+        "skew",
+        "kurtosis",
     }
     missing_statistics = required_statistics.difference(sample_statistics)
     if missing_statistics:

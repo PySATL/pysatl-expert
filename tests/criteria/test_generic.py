@@ -324,9 +324,7 @@ def test_every_location_scale_raw_criterion_is_affine_invariant():
             if "lambda" in params:
                 transformed_params["lambda"] = params["lambda"] / factor
 
-        base_value = GenericCriterion(spec.statistic_class()).calculate(
-            data, distribution, params
-        )
+        base_value = GenericCriterion(spec.statistic_class()).calculate(data, distribution, params)
         transformed_value = GenericCriterion(spec.statistic_class()).calculate(
             factor * data + offset,
             distribution,

@@ -81,9 +81,7 @@ def validate_run_config(
         raise ValueError("Feature selection config must be a JSON object")
     stage1_count = config.get("stage1_feature_count")
     stage2_counts = config.get("stage2_feature_counts")
-    expected_stage2 = {
-        family for family, members in family_map.items() if len(members) > 1
-    }
+    expected_stage2 = {family for family, members in family_map.items() if len(members) > 1}
     if not isinstance(stage1_count, int) or stage1_count < 1:
         raise ValueError("stage1_feature_count must be positive")
     if not isinstance(stage2_counts, dict) or set(stage2_counts) != expected_stage2:
@@ -122,9 +120,7 @@ def build_missingness_audit(
         if family not in stage2_features:
             continue
         family_rows = training[targets.isin(members)]
-        missing = family_rows[columns].columns[
-            family_rows[columns].isna().any()
-        ].tolist()
+        missing = family_rows[columns].columns[family_rows[columns].isna().any()].tolist()
         selected_rates = family_rows[stage2_features[family]].isna().mean()
         stage2_audit[family] = {
             "eligible_feature_count": len(columns) - len(missing),
@@ -198,9 +194,7 @@ def main(argv: list[str] | None = None) -> None:
     document["selection_audit"] = build_missingness_audit(
         training, targets, family_map, stage1_features, stage2_features
     )
-    document["split"].update(
-        {"training_rows": len(training), "outer_test_rows": outer_test_rows}
-    )
+    document["split"].update({"training_rows": len(training), "outer_test_rows": outer_test_rows})
     validate_selection_document(document, family_map, FeatureVector.FEATURE_NAMES)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

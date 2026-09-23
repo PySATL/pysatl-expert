@@ -162,10 +162,7 @@ def test_batched_selection_importances_match_one_complete_forest():
     rng = np.random.RandomState(7)
     features = rng.normal(size=(1_000, 12)).astype(np.float32)
     target = (
-        features[:, 0]
-        + 0.7 * features[:, 3]
-        + rng.normal(size=len(features)) * 0.2
-        > 0
+        features[:, 0] + 0.7 * features[:, 3] + rng.normal(size=len(features)) * 0.2 > 0
     ).astype(int)
     complete_forest = RandomForestClassifier(
         n_estimators=37,

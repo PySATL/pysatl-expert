@@ -66,9 +66,7 @@ def test_feature_vector_excludes_unstable_criteria_from_the_raw_schema():
 
     assert not unstable_criteria.intersection(FeatureVector.FEATURE_NAMES)
     assert unstable_criteria <= FeatureVector.EXCLUDED_TRAINING_FEATURES
-    assert not FeatureVector.EXCLUDED_TRAINING_FEATURES.intersection(
-        FeatureVector.FEATURE_NAMES
-    )
+    assert not FeatureVector.EXCLUDED_TRAINING_FEATURES.intersection(FeatureVector.FEATURE_NAMES)
     assert FeatureVector.TRAINING_FEATURE_NAMES == FeatureVector.FEATURE_NAMES
 
 
@@ -128,9 +126,7 @@ def test_feature_vector_can_follow_an_existing_model_schema():
         {"Normal": {"ks": 0.5}},
     )
 
-    values = fv.as_flat_list(
-        feature_names=["normal__ks", "sample_size", "legacy__missing", "skew"]
-    )
+    values = fv.as_flat_list(feature_names=["normal__ks", "sample_size", "legacy__missing", "skew"])
 
     assert values[:2] == [0.5, 100.0]
     assert math.isnan(values[2])

@@ -138,9 +138,7 @@ def test_tracked_selection_config_preserves_approved_asymmetric_budgets():
     family_map = json.loads(
         (project_root / "pysatl_expert/config/domain_distribution_families.json").read_text()
     )
-    config = json.loads(
-        (project_root / "pysatl_expert/config/feature_selection.json").read_text()
-    )
+    config = json.loads((project_root / "pysatl_expert/config/feature_selection.json").read_text())
 
     validated = validate_run_config(config, family_map)
 

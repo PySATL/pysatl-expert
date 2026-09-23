@@ -1,6 +1,6 @@
 """Versioned contract between feature selection and final model training."""
 
-from typing import Any
+from typing import Any, TypeGuard
 
 from pysatl_expert.models.feature_vector import FeatureVector
 
@@ -8,7 +8,7 @@ from pysatl_expert.models.feature_vector import FeatureVector
 SELECTION_SCHEMA_VERSION = 1
 
 
-def _is_integer(value: object) -> bool:
+def _is_integer(value: object) -> TypeGuard[int]:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
@@ -64,22 +64,20 @@ def _validate_feature_list(
     label: str,
     known_features: set[str],
 ) -> list[str]:
-    if not isinstance(value, list) or not value or not all(
-        isinstance(feature, str) for feature in value
+    if (
+        not isinstance(value, list)
+        or not value
+        or not all(isinstance(feature, str) for feature in value)
     ):
         raise ValueError(f"{label} must be a non-empty list of feature names")
     if len(value) != len(set(value)):
         raise ValueError(f"{label} contains duplicate features")
     unknown = set(value).difference(known_features)
     if unknown:
-        raise ValueError(
-            f"{label} contains unknown feature(s): " + ", ".join(sorted(unknown))
-        )
+        raise ValueError(f"{label} contains unknown feature(s): " + ", ".join(sorted(unknown)))
     excluded = set(value).intersection(FeatureVector.EXCLUDED_TRAINING_FEATURES)
     if excluded:
-        raise ValueError(
-            f"{label} contains excluded feature(s): " + ", ".join(sorted(excluded))
-        )
+        raise ValueError(f"{label} contains excluded feature(s): " + ", ".join(sorted(excluded)))
     return value
 
 
@@ -91,8 +89,7 @@ def _validate_dataset_config(document: dict[str, Any]) -> None:
     missing = required.difference(dataset)
     if missing:
         raise ValueError(
-            "Feature selection dataset configuration is missing: "
-            + ", ".join(sorted(missing))
+            "Feature selection dataset configuration is missing: " + ", ".join(sorted(missing))
         )
     if dataset["kind"] != "frozen_csv":
         raise ValueError("Unsupported feature selection dataset kind")
@@ -116,9 +113,7 @@ def _validate_selector_config(
     }
     if not isinstance(stage2_counts, dict) or set(stage2_counts) != expected_stage2:
         raise ValueError("Stage 2 feature budgets do not match training families")
-    _validate_positive_integer(
-        selector.get("stage1_feature_count"), "stage1_feature_count"
-    )
+    _validate_positive_integer(selector.get("stage1_feature_count"), "stage1_feature_count")
     for count in stage2_counts.values():
         _validate_positive_integer(count, "stage2_feature_counts")
     _validate_positive_integer(selector.get("estimators"), "estimators")
@@ -163,9 +158,7 @@ def _validate_selections(
         family for family, members in expected_family_map.items() if len(members) > 1
     }
     if set(stage2) != expected_stage2:
-        raise ValueError(
-            "Stage 2 selection families do not match multi-distribution families"
-        )
+        raise ValueError("Stage 2 selection families do not match multi-distribution families")
     for family, features in stage2.items():
         validated_features = _validate_feature_list(
             features,
@@ -173,9 +166,7 @@ def _validate_selections(
             known_features=known_features,
         )
         if len(validated_features) != selector["stage2_feature_counts"][family]:
-            raise ValueError(
-                f"Stage 2 selection for {family} does not match its feature count"
-            )
+            raise ValueError(f"Stage 2 selection for {family} does not match its feature count")
 
 
 def validate_selection_document(

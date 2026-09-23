@@ -43,9 +43,7 @@ def load_sample(
     skip_header_rows: int = 0,
 ) -> np.ndarray:
     """Read exactly one numeric column from a user-provided file."""
-    values = np.loadtxt(
-        input_path, delimiter=delimiter, skiprows=skip_header_rows, ndmin=2
-    )
+    values = np.loadtxt(input_path, delimiter=delimiter, skiprows=skip_header_rows, ndmin=2)
     if values.shape[1] != 1:
         raise ValueError("Input file must contain exactly one column of observations")
     return values[:, 0]
@@ -56,9 +54,7 @@ def main(argv: list[str] | None = None) -> Report:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     args = build_parser().parse_args(sys.argv[1:] if argv is None else argv)
     if args.output.exists():
-        raise FileExistsError(
-            f"Report already exists; choose another --output path: {args.output}"
-        )
+        raise FileExistsError(f"Report already exists; choose another --output path: {args.output}")
     sample = load_sample(
         args.input,
         delimiter=args.delimiter,

@@ -21,6 +21,8 @@ _PACKAGE_DISTRIBUTIONS = {
     "pysatl_expert": "pysatl-expert",
     "pysatl_criterion": "pysatl-criterion",
 }
+
+
 class ModelCompatibilityError(ValueError):
     """Raised when a model bundle is damaged, stale, or incompatible."""
 
@@ -93,9 +95,7 @@ def _portable_feature_configuration(selection_document: dict[str, Any]) -> dict[
     return {key: selection_document[key] for key in required}
 
 
-def _selected_feature_summary(
-    stage1: list[str], stage2: dict[str, list[str]]
-) -> dict[str, Any]:
+def _selected_feature_summary(stage1: list[str], stage2: dict[str, list[str]]) -> dict[str, Any]:
     required = set(stage1)
     for features in stage2.values():
         required.update(features)
@@ -125,10 +125,7 @@ def build_model_manifest(
     family_map = portable_config["family_map"]
     selection = portable_config["selection"]
     stage1 = list(selection["stage1_features"])
-    stage2 = {
-        family: list(features)
-        for family, features in selection["stage2_features"].items()
-    }
+    stage2 = {family: list(features) for family, features in selection["stage2_features"].items()}
     classes = sorted(member for members in family_map.values() for member in members)
 
     manifest = {
@@ -210,14 +207,14 @@ def _validate_runtime(manifest: dict[str, Any]) -> None:
             )
 
 
-def _validate_selected_features(
-    manifest: dict[str, Any], feature_names: list[str]
-) -> None:
+def _validate_selected_features(manifest: dict[str, Any], feature_names: list[str]) -> None:
     selected = _require_mapping(manifest.get("selected_features"), "selected_features")
     stage1 = selected.get("stage1")
     stage2 = selected.get("stage2")
-    if not isinstance(stage1, list) or not stage1 or not all(
-        isinstance(feature, str) for feature in stage1
+    if (
+        not isinstance(stage1, list)
+        or not stage1
+        or not all(isinstance(feature, str) for feature in stage1)
     ):
         raise ModelCompatibilityError("Model manifest Stage 1 features are invalid")
     if not isinstance(stage2, dict) or not stage2:
@@ -249,8 +246,7 @@ def _validate_selected_features(
 def _read_manifest(path: Path) -> dict[str, Any]:
     if not path.is_file():
         raise ModelCompatibilityError(
-            f"Model manifest is missing: {path}. "
-            "Install or download the complete model bundle."
+            f"Model manifest is missing: {path}. " "Install or download the complete model bundle."
         )
     if path.stat().st_size > _MAX_MANIFEST_BYTES:
         raise ModelCompatibilityError("Model manifest is unexpectedly large")
@@ -302,9 +298,7 @@ def _validate_feature_configuration(
     ):
         raise ModelCompatibilityError("Model manifest must contain three valid families")
     classes = manifest.get("classes")
-    expected_classes = sorted(
-        member for members in families.values() for member in members
-    )
+    expected_classes = sorted(member for members in families.values() for member in members)
     if (
         classes != expected_classes
         or len(expected_classes) != 8
@@ -329,9 +323,7 @@ def _validate_feature_configuration(
             "stage2_features": selected["stage2"],
         },
     }
-    if feature_configuration.get("sha256") != _canonical_sha256(
-        portable_configuration
-    ):
+    if feature_configuration.get("sha256") != _canonical_sha256(portable_configuration):
         raise ModelCompatibilityError("Model feature configuration hash is inconsistent")
 
 

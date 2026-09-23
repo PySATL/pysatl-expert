@@ -63,13 +63,9 @@ class StudentDistribution(AbstractDistribution):
         """
         return st.t.cdf(data, df=params["df"], loc=params["loc"], scale=params["scale"])
 
-    def prepare_criterion_input(
-        self, data: np.ndarray, params: dict
-    ) -> tuple[np.ndarray, dict]:
+    def prepare_criterion_input(self, data: np.ndarray, params: dict) -> tuple[np.ndarray, dict]:
         """Standardize observations for canonical Student criteria."""
-        observations = self._standardize_criterion_input(
-            data, params["loc"], params["scale"]
-        )
+        observations = self._standardize_criterion_input(data, params["loc"], params["scale"])
         return observations, {
             "df": float(params["df"]),
             "loc": 0.0,

@@ -64,12 +64,8 @@ class UniformDistribution(AbstractDistribution):
         """
         return st.uniform.cdf(data, loc=params["a"], scale=params["b"] - params["a"])
 
-    def prepare_criterion_input(
-        self, data: np.ndarray, params: dict
-    ) -> tuple[np.ndarray, dict]:
+    def prepare_criterion_input(self, data: np.ndarray, params: dict) -> tuple[np.ndarray, dict]:
         """Map observations to the canonical Uniform interval."""
         lower = float(params["a"])
-        observations = self._standardize_criterion_input(
-            data, lower, float(params["b"]) - lower
-        )
+        observations = self._standardize_criterion_input(data, lower, float(params["b"]) - lower)
         return observations, {"a": 0.0, "b": 1.0}

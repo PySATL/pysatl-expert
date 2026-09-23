@@ -62,14 +62,10 @@ class BetaDistribution(AbstractDistribution):
         """
         return st.beta.cdf(data, a=params["alpha"], b=params["beta"])
 
-    def prepare_criterion_input(
-        self, data: np.ndarray, params: dict
-    ) -> tuple[np.ndarray, dict]:
+    def prepare_criterion_input(self, data: np.ndarray, params: dict) -> tuple[np.ndarray, dict]:
         """Validate and move boundary observations into the open interval."""
         observations = np.asarray(data, dtype=float)
         if np.any(observations < 0.0) or np.any(observations > 1.0):
-            raise ValueError(
-                "Beta criteria require every observation to lie in [0, 1]"
-            )
+            raise ValueError("Beta criteria require every observation to lie in [0, 1]")
         epsilon = np.finfo(float).eps
         return np.clip(observations, epsilon, 1.0 - epsilon), params

@@ -90,20 +90,23 @@ def test_main_forwards_settings_and_returns_result(runner, tmp_path, monkeypatch
     monkeypatch.setattr(runner, "build_pipeline", build)
     monkeypatch.setattr(runner, "generate_pdf_report", pdf)
     model_path = tmp_path / "model.joblib"
-    assert runner.main(
-        [
-            "--input",
-            str(input_path),
-            "--model",
-            str(model_path),
-            "--output",
-            str(output_path),
-            "--bootstraps",
-            "3",
-            "--random-state",
-            "17",
-        ]
-    ) is report
+    assert (
+        runner.main(
+            [
+                "--input",
+                str(input_path),
+                "--model",
+                str(model_path),
+                "--output",
+                str(output_path),
+                "--bootstraps",
+                "3",
+                "--random-state",
+                "17",
+            ]
+        )
+        is report
+    )
     assert captured == {
         "model_path": model_path,
         "n_bootstraps": 3,

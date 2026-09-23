@@ -22,15 +22,11 @@ def load_frozen_training_dataset(
         raise ValueError("Frozen dataset Split column must not contain missing values")
     split_values = set(frame["Split"].unique())
     if split_values != {"train", "outer_test"}:
-        raise ValueError(
-            "Frozen dataset Split column must contain train and outer_test rows"
-        )
+        raise ValueError("Frozen dataset Split column must contain train and outer_test rows")
 
     feature_columns = [*FeatureVector.FEATURE_NAMES, "Target"]
     training = frame.loc[frame["Split"] == "train", feature_columns].reset_index(drop=True)
-    outer_test = frame.loc[
-        frame["Split"] == "outer_test", feature_columns
-    ].reset_index(drop=True)
+    outer_test = frame.loc[frame["Split"] == "outer_test", feature_columns].reset_index(drop=True)
     if training.empty or outer_test.empty:
         raise ValueError("Frozen dataset must contain non-empty train and outer-test splits")
     return training, outer_test
@@ -67,9 +63,7 @@ def load_frozen_training_partition(
         outer_test_rows += int((frame["Split"] == "outer_test").sum())
 
     if split_values != {"train", "outer_test"}:
-        raise ValueError(
-            "Frozen dataset Split column must contain train and outer_test rows"
-        )
+        raise ValueError("Frozen dataset Split column must contain train and outer_test rows")
     training = pd.concat(training_chunks, ignore_index=True)
     if training.empty or outer_test_rows == 0:
         raise ValueError("Frozen dataset must contain non-empty train and outer-test splits")

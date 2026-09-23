@@ -29,9 +29,7 @@ class LogNormalDistribution(AbstractDistribution):
         loc = params["loc"]
         return st.lognorm.cdf(data, s=params["s"], loc=loc, scale=params["scale"])
 
-    def prepare_criterion_input(
-        self, data: np.ndarray, params: dict
-    ) -> tuple[np.ndarray, dict]:
+    def prepare_criterion_input(self, data: np.ndarray, params: dict) -> tuple[np.ndarray, dict]:
         """Standardize observations for canonical Log-Normal criteria."""
         observations = self._standardize_criterion_input(
             data,

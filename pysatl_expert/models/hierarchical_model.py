@@ -47,9 +47,7 @@ class HierarchicalExpertModel:
         self.stage2_models: dict[str, RandomForestClassifier] = {}
         self.stage2_features: dict[str, list[str]] = {}
 
-    def _validate_training_data(
-        self, X_df: pd.DataFrame, y_series: pd.Series
-    ) -> list[str]:
+    def _validate_training_data(self, X_df: pd.DataFrame, y_series: pd.Series) -> list[str]:
         if len(X_df) != len(y_series) or len(X_df) == 0:
             raise ValueError("Training features and targets must be non-empty and equally sized")
         expected_targets = set(self.dist_to_family)
@@ -75,9 +73,7 @@ class HierarchicalExpertModel:
         if n_jobs < 1:
             raise ValueError("n_jobs must be positive")
 
-    def _validate_stage2_budgets(
-        self, n_stage2: int | Mapping[str, int] | None
-    ) -> None:
+    def _validate_stage2_budgets(self, n_stage2: int | Mapping[str, int] | None) -> None:
         if isinstance(n_stage2, Mapping):
             expected_families = {
                 family for family, members in self.family_map.items() if len(members) > 1
@@ -112,9 +108,7 @@ class HierarchicalExpertModel:
                 n_jobs=n_jobs,
             )
             selector.fit(features, target)
-            tree_importances.extend(
-                tree.feature_importances_ for tree in selector.estimators_
-            )
+            tree_importances.extend(tree.feature_importances_ for tree in selector.estimators_)
             del selector
             gc.collect()
         return np.mean(tree_importances, axis=0)
@@ -183,13 +177,9 @@ class HierarchicalExpertModel:
             eligible_features = training_features
             if complete_stage2:
                 eligible_features = [
-                    feature
-                    for feature in training_features
-                    if not X_family[feature].isna().any()
+                    feature for feature in training_features if not X_family[feature].isna().any()
                 ]
-            family_budget = (
-                n_stage2[family_name] if isinstance(n_stage2, Mapping) else n_stage2
-            )
+            family_budget = n_stage2[family_name] if isinstance(n_stage2, Mapping) else n_stage2
             stage2_features[family_name] = self._select_top_features(
                 X_family,
                 y_family,
@@ -214,9 +204,7 @@ class HierarchicalExpertModel:
         training_features = self._validate_training_data(X_df, y_series)
         self._validate_forest_resources(n_estimators, n_jobs)
         expected_stage2 = {
-            family_name
-            for family_name, members in self.family_map.items()
-            if len(members) > 1
+            family_name for family_name, members in self.family_map.items() if len(members) > 1
         }
         missing_stage2 = expected_stage2.difference(stage2_features)
         extra_stage2 = set(stage2_features).difference(expected_stage2)
@@ -240,15 +228,13 @@ class HierarchicalExpertModel:
             unknown = set(selected).difference(training_features)
             if unknown:
                 raise ValueError(
-                    f"{selection_name} contains unknown feature(s): "
-                    + ", ".join(sorted(unknown))
+                    f"{selection_name} contains unknown feature(s): " + ", ".join(sorted(unknown))
                 )
 
         self.feature_names = X_df.columns.tolist()
         self.stage1_features = list(stage1_features)
         self.stage2_features = {
-            family_name: list(selected)
-            for family_name, selected in stage2_features.items()
+            family_name: list(selected) for family_name, selected in stage2_features.items()
         }
         self.stage2_models = {}
         y_families = y_series.map(self.dist_to_family)

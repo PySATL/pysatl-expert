@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -18,9 +19,7 @@ from scripts.train_model import (
 
 
 def test_resolve_path_accepts_json_string(tmp_path: Path):
-    assert _resolve_path("dataset/training.csv", tmp_path) == (
-        tmp_path / "dataset/training.csv"
-    )
+    assert _resolve_path("dataset/training.csv", tmp_path) == (tmp_path / "dataset/training.csv")
 
 
 def test_training_defaults_do_not_overwrite_model():
@@ -87,10 +86,7 @@ def test_training_artifacts_include_verified_model_manifest(tmp_path):
 
 def test_domain_family_map_covers_every_training_target_once():
     path = (
-        Path(__file__).parents[2]
-        / "pysatl_expert"
-        / "config"
-        / "domain_distribution_families.json"
+        Path(__file__).parents[2] / "pysatl_expert" / "config" / "domain_distribution_families.json"
     )
     family_map = json.loads(path.read_text(encoding="utf-8"))
     members = [member for family in family_map.values() for member in family]
@@ -103,7 +99,7 @@ def test_domain_family_map_covers_every_training_target_once():
 
 
 def test_training_data_preserves_continuous_values_and_exact_schema():
-    row = dict.fromkeys(FeatureVector.FEATURE_NAMES, 0.0)
+    row: dict[str, Any] = dict.fromkeys(FeatureVector.FEATURE_NAMES, 0.0)
     row["sample_size"] = 100.0
     row["normal__ks"] = 1.0
     row["Target"] = "Normal"
@@ -116,7 +112,7 @@ def test_training_data_preserves_continuous_values_and_exact_schema():
 
 
 def test_training_data_preserves_missing_values_as_nan() -> None:
-    row = dict.fromkeys(FeatureVector.FEATURE_NAMES, 0.0)
+    row: dict[str, Any] = dict.fromkeys(FeatureVector.FEATURE_NAMES, 0.0)
     row["normal__ks"] = np.nan
     row["normal__ad"] = np.inf
     row["Target"] = "Normal"
@@ -129,7 +125,7 @@ def test_training_data_preserves_missing_values_as_nan() -> None:
 
 
 def test_training_data_discards_known_historical_excluded_columns() -> None:
-    row = dict.fromkeys(FeatureVector.FEATURE_NAMES, 0.0)
+    row: dict[str, Any] = dict.fromkeys(FeatureVector.FEATURE_NAMES, 0.0)
     row["beta__mode"] = 123.0
     row["normal__rj"] = 0.99
     row["Target"] = "Normal"
@@ -142,7 +138,7 @@ def test_training_data_discards_known_historical_excluded_columns() -> None:
 
 
 def test_training_data_rejects_unknown_extra_columns() -> None:
-    row = dict.fromkeys(FeatureVector.FEATURE_NAMES, 0.0)
+    row: dict[str, Any] = dict.fromkeys(FeatureVector.FEATURE_NAMES, 0.0)
     row["unknown_feature"] = 1.0
     row["Target"] = "Normal"
 
@@ -156,7 +152,7 @@ def test_training_loader_selects_balanced_smoke_rows_without_historical_columns(
     rows = []
     for target in ("A", "B"):
         for index in range(3):
-            row = dict.fromkeys(FeatureVector.FEATURE_NAMES, float(index))
+            row: dict[str, Any] = dict.fromkeys(FeatureVector.FEATURE_NAMES, float(index))
             row["beta__mode"] = 1000.0
             row["Target"] = target
             rows.append(row)
@@ -195,7 +191,4 @@ def test_training_reports_stage1_and_each_stage2_accuracy():
 
     assert metrics["stage1_family"]["accuracy"] > 0.95
     assert set(metrics["stage2_by_family"]) == {"negative", "positive"}
-    assert all(
-        result["accuracy"] > 0.95
-        for result in metrics["stage2_by_family"].values()
-    )
+    assert all(result["accuracy"] > 0.95 for result in metrics["stage2_by_family"].values())

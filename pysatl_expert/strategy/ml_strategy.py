@@ -8,10 +8,7 @@ from joblib import load as load_model
 from pysatl_expert.core.strategy import AbstractStrategy
 from pysatl_expert.models.feature_vector import FeatureVector
 from pysatl_expert.models.hierarchical_model import HierarchicalExpertModel
-from pysatl_expert.models.model_manifest import (
-    validate_loaded_model,
-    verify_model_manifest,
-)
+from pysatl_expert.models.model_manifest import validate_loaded_model, verify_model_manifest
 from pysatl_expert.models.report import Report
 
 
@@ -70,8 +67,7 @@ class MLStrategy(AbstractStrategy):
         unknown = selected.difference(self.feature_names)
         if unknown:
             raise ValueError(
-                "Model selects features outside its bundled schema: "
-                + ", ".join(sorted(unknown))
+                "Model selects features outside its bundled schema: " + ", ".join(sorted(unknown))
             )
         return frozenset(selected)
 
