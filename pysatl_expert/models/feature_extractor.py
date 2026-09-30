@@ -3,61 +3,46 @@ import scipy.stats as stats
 
 
 class FeatureExtractor:
-    """
-    Service for calculating intrinsic statistical properties of a data sample.
+    """Calculate descriptive statistics used by the model and reports."""
 
-    Computes a set of descriptive metrics used to build a profile of the input
-    data. These features characterize the shape and complexity of the sample,
-    independent of its scale, providing the necessary inputs for decision-making
-    strategies.
-    """
-
-    def __init__(self):
-        """
-        Initializes the feature extraction service.
-        """
-        pass
-
-    def calculate_sample_stats(self, data: np.ndarray) -> dict:
-        """
-        Computes a dictionary of scale-invariant and robust sample statistics.
-
-        The extracted features include:
-        - Boundary values (min, max) for domain validation.
-        - Classical shape moments (skewness, kurtosis).
-        - Dispersion metrics (variation, relative IQR).
-        - Complexity measures (entropy).
+    def calculate_sample_stats(self, data: np.ndarray) -> dict[str, float | int]:
+        """Compute descriptive sample statistics.
 
         Args:
-            data (np.ndarray): The raw numerical sample to profile.
+            data (np.ndarray): Raw numerical sample array to profile.
 
         Returns:
-            dict: A collection of calculated features (floats and ints).
+            dict[str, float | int]: Statistics for model features and presentation.
         """
-        data_min = np.min(data)
-        data_max = np.max(data)
+        data_min = float(np.min(data))
+        data_max = float(np.max(data))
         n = len(data)
+        mean = float(np.mean(data))
+        median = float(np.median(data))
 
         skew = stats.skew(data)
         kurt = stats.kurtosis(data)
 
-        mean_val = float(np.mean(data))
         std_val = float(np.std(data))
-        variation = std_val / mean_val if abs(mean_val) > 1e-9 else 0
+        variance = float(np.var(data))
 
-        q25, q50, q75 = np.percentile(data, [25, 50, 75])
+        q25, q75 = np.percentile(data, [25, 75])
         iqr = q75 - q25
-        relative_iqr = iqr / q50 if q50 != 0 else 0
+        relative_iqr = iqr / std_val if std_val > 0.0 else 0.0
 
         entropy = stats.entropy(np.histogram(data, bins="auto")[0])
 
         return {
-            "min": float(data_min),
-            "max": float(data_max),
+            "min": data_min,
+            "max": data_max,
             "sample_size": int(n),
+            "mean": mean,
+            "median": median,
+            "standard_deviation": std_val,
+            "variance": variance,
             "skew": float(skew),
             "kurtosis": float(kurt),
-            "coef_of_variation": float(variation),
+            "iqr": float(iqr),
             "relative_iqr": float(relative_iqr),
             "entropy": float(entropy),
         }

@@ -1,78 +1,96 @@
 # PySATL Expert
 
+`pysatl-expert` is an experimental system that recommends a probability
+distribution for one empirical numeric sample. It combines parameter estimation,
+goodness-of-fit statistics from `pysatl-criterion`, and a two-stage Random Forest
+model.
 
-**Pysatl-expert** is experimental expert system designed for the automatic identification of the distribution law of a random variable.
+The current model distinguishes eight distributions: Normal, Student, Exponential,
+Gamma, LogNormal, Weibull, Beta, and Uniform.
 
-Currently, the system uses an ensemble approach based on bootstrap aggregation and a heuristic decision-making strategy.
+## Prototype scope
 
----
-## Features
-- **Modular architecture:** Easily add new distributions, goodness-of-fit criteria, and selection strategies.
-- **Domain pre-validation:** Automatically filters distributions based on their theoretical support.
-- **Bootstrap analysis:** Estimating the confidence level of identification by repeatedly resampling the source data.
-- **ML-Ready:** The system generates standardized feature vectors  ready for training machine learning models.
+The result is an uncalibrated model recommendation, not a probability that a
+statistical hypothesis is true.
 
----
+Exponential, Gamma, LogNormal, and Weibull use the prototype policy `loc = 0`.
+Beta uses fixed support `[0, 1]`. Arbitrarily shifted samples are therefore not a
+supported identification scenario for those distributions.
 
-## Architecture
+## Installation
 
-* `core/`: Abstract interfaces and base classes of the system.
-* `distributions/`: Implementations of statistical distributions (Normal, Exponential, Weibull).
-* `criteria/`: Wrappers over statistical tests.
-* `models/`: Reports and feature vectors.
-* `strategy/`: The logic for making the final decision.
+`pysatl-criterion` is installed from its GitHub repository. Its resolved revision
+is recorded in `poetry.lock`.
 
----
+```bash
+poetry install
+```
 
-## Decision strategy
-The identification algorithm is driven by the `HeuristicStrategy`, which relies on three core principles:
-#### 1. Score Unification
-   Statistical criteria return results on different scales, the strategy aligns them to a single standard -- the Penalty Score.
-   * The lower the score - the better
-   * Metrics where "higher is better" are inverted
-   * Metrics with low variability are scaled so that their contribution is comparable to more sweeping criteria.
-#### 2. Complexity Penalty
-   * If two distributions describe the data with equal accuracy, the simpler model (with fewer parameters) is preferred.
-#### 3. Bootstrap Consensus
-   * The final decision is made based on a vote based on the results of multiple bootstrap iterations. 
-   Confidence of the system is calculated as the percentage of votes cast for the winning allocation.
+## Run an analysis
 
-> **Note**:
-The current implementation of `HeuristicStrategy` is a **baseline solution**,
-with parameters selected empirically.
-> 
->The main goal of this strategy is to validate the pipeline and test the hypothesis that the selected set of features is sufficient to separate distribution classes.
->Thanks to the modular architecture, future plans include replacing the heuristic algorithm with a trainable ML classifier (e.g., Random Forest),
-which will be able to automatically identify nonlinear relationships between statistical metrics without manually adjusting weights.
+The command accepts a CSV containing exactly one numeric column and requires a
+trusted model bundle:
 
----
+```bash
+poetry run pysatl-expert \
+  --input sample.csv \
+  --model path/to/model.joblib \
+  --output output/report.pdf
+```
 
-## Example
+For a header row such as `value`, add `--skip-header-rows 1`. Run
+`poetry run pysatl-expert --help` for delimiter, bootstrap, and output options.
+The command does not overwrite an existing report.
+
+The default report calculates only the statistics required by the loaded model.
+`--pdf-mode full` displays those selected model inputs; it does not calculate every
+registered criterion or change the ranking.
+
+## Use from Python
+
+Build the pipeline once when analyzing several samples:
 
 ```python
-import numpy as np
-from pysatl_expert.pipeline import DistributionPipeline
-from pysatl_expert.core.pipeline_components import PipelineComponents
-from pysatl_expert.distributions.normal import NormalDistribution
-from pysatl_expert.distributions.exponential import ExponentialDistribution
-from pysatl_expert.criteria.selectors.simple_selector import SimpleCriterionSelector
-from pysatl_expert.strategy.heuristic_strategy import HeuristicStrategy
-from pysatl_expert.models.feature_extractor import FeatureExtractor
+from pysatl_expert.app import build_pipeline
+from pysatl_expert.reporting.pdf import generate_pdf_report
 
-# 1. Assembling the system components
-components = PipelineComponents(
-    distributions=[NormalDistribution(), ExponentialDistribution()],
-    criterion_selector=SimpleCriterionSelector(),
-    strategy=HeuristicStrategy(),
-    feature_extractor=FeatureExtractor()
-)
-
-# 2. Initializing the pipeline
-pipeline = DistributionPipeline(components)
-
-# 3. Running identification (with 100 bootstrap iterations)
-data = np.random.normal(loc=5, scale=2, size=150)
-report = pipeline.identify_best(data, n_bootstraps=100)
-
-print(report)
+pipeline = build_pipeline(model_path="path/to/model.joblib")
+report = pipeline.identify_best(sample, n_bootstraps=0, random_state=42)
+generate_pdf_report(sample, report, output_path="report.pdf", mode="summary")
 ```
+
+`identify_best` does not write files or print output. `evaluate_sample` remains a
+convenience wrapper for one-off console, PDF, and PNG output.
+
+## Model bundle
+
+A model bundle contains two adjacent files:
+
+- `<model>.joblib` — the serialized hierarchical model;
+- `<model>.manifest.json` — its integrity and compatibility metadata.
+
+The manifest must have the same stem as the model. Before loading the trusted
+joblib file, the application verifies the model hash, feature schema, and runtime
+versions recorded in the manifest. Obtain both files from the same release.
+
+## Reproducible training
+
+Training uses one local frozen CSV, which is intentionally excluded from Git. It
+must contain all active feature columns, `Target`, and a `Split` column with exactly
+`train` and `outer_test` values.
+
+Set the local CSV path in `pysatl_expert/config/feature_selection.json`, then run:
+
+```bash
+# Select fixed Stage 1 and Stage 2 feature sets from the train partition.
+poetry run python scripts/select_features.py
+
+# Train and evaluate the final model using that fixed selection.
+poetry run python scripts/train_model.py
+```
+
+`select_features.py` ranks candidate inputs automatically while respecting the
+project's explicit exclusions. It writes the selected feature names and training
+configuration to `selected_features.json`. `train_model.py` validates that document,
+fits the final Stage 1 and Stage 2 forests, evaluates once on `outer_test`, and writes
+the model, metrics, and manifest.

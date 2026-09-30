@@ -1,0 +1,16 @@
+{
+  "SymmetricUnbounded": [
+    "Normal",
+    "Student"
+  ],
+  "PositiveUnbounded": [
+    "Exponential",
+    "Gamma",
+    "LogNormal",
+    "Weibull"
+  ],
+  "Bounded": [
+    "Beta",
+    "Uniform"
+  ]
+}

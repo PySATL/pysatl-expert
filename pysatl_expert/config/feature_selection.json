@@ -1,0 +1,21 @@
+{
+  "dataset": {
+    "kind": "frozen_csv",
+    "path": "artifacts/hrf/dataset/hrf_training_raw.csv",
+    "outer_test_size": 0.2,
+    "outer_seed": 42
+  },
+  "stage1_feature_count": 30,
+  "stage2_feature_counts": {
+    "SymmetricUnbounded": 15,
+    "PositiveUnbounded": 20,
+    "Bounded": 15
+  },
+  "stage1_missing_policy": "allow_nan_and_report",
+  "stage2_missing_policy": "complete_within_family",
+  "forest": {
+    "estimators": 200,
+    "random_state": 42,
+    "selection_max_depth": 15
+  }
+}
