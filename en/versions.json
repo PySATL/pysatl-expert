@@ -5,6 +5,13 @@
     "aliases": []
   },
   {
+    "version": "model-hrf-8dist-v1",
+    "title": "model-hrf-8dist-v1",
+    "aliases": [
+      "stable"
+    ]
+  },
+  {
     "version": "main",
     "title": "main",
     "aliases": [
