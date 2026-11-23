@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from numbers import Real
-from typing import Protocol, cast
+from typing import Protocol, TypeAlias, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -19,7 +19,7 @@ from pysatl_expert.core.recommendation import (
 from pysatl_expert.models.analysis_result import AnalysisResult, ProcedureResult
 
 
-Sample = NDArray[np.float64]
+Sample: TypeAlias = NDArray[np.float64]
 ProcedureRegistry = Mapping[str, StatisticProcedure | ProcedureAdapter]
 
 
