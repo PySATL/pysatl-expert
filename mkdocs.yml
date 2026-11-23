@@ -5,14 +5,14 @@ repo_url: https://github.com/PySATL/pysatl-expert
 edit_uri: edit/main/docs/
 use_directory_urls: True
 nav:
-    - Home: index.md
-    - API Reference:
-        - Core: reference/core.md
-        - Distributions: reference/distributions.md
-        - Models: reference/models.md
-        - Strategy: reference/strategy.md
-        - Criteria: reference/criteria.md
-        - Main: reference/main.md
+  - Home: index.md
+  - API Reference:
+      - Entry points: reference/main.md
+      - Results and reporting: reference/models.md
+      - Method contracts: reference/core.md
+      - Statistics and procedures: reference/criteria.md
+      - ML adapter: reference/strategy.md
+      - Distributions: reference/distributions.md
 theme:
   name: material
   logo: "images/logo.jpeg"

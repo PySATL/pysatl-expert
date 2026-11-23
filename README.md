@@ -1,96 +1,81 @@
 # PySATL Expert
 
-`pysatl-expert` is an experimental system that recommends a probability
-distribution for one empirical numeric sample. It combines parameter estimation,
-goodness-of-fit statistics from `pysatl-criterion`, and a two-stage Random Forest
-model.
+PySATL Expert analyzes one finite numeric sample. Its general API fits explicitly chosen distributions, calculates explicitly chosen raw statistics, and stores results and failures in an `AnalysisResult`. Ready recommendation methods are built on top of that analysis.
 
-The current model distinguishes eight distributions: Normal, Student, Exponential,
-Gamma, LogNormal, Weibull, Beta, and Uniform.
+## Analyze a sample
 
-## Prototype scope
-
-The result is an uncalibrated model recommendation, not a probability that a
-statistical hypothesis is true.
-
-Exponential, Gamma, LogNormal, and Weibull use the prototype policy `loc = 0`.
-Beta uses fixed support `[0, 1]`. Arbitrarily shifted samples are therefore not a
-supported identification scenario for those distributions.
-
-## Installation
-
-`pysatl-criterion` is installed from its GitHub repository. Its resolved revision
-is recorded in `poetry.lock`.
-
-```bash
-poetry install
-```
-
-## Run an analysis
-
-The command accepts a CSV containing exactly one numeric column and requires a
-trusted model bundle:
-
-```bash
-poetry run pysatl-expert \
-  --input sample.csv \
-  --model path/to/model.joblib \
-  --output output/report.pdf
-```
-
-For a header row such as `value`, add `--skip-header-rows 1`. Run
-`poetry run pysatl-expert --help` for delimiter, bootstrap, and output options.
-The command does not overwrite an existing report.
-
-The default report calculates only the statistics required by the loaded model.
-`--pdf-mode full` displays those selected model inputs; it does not calculate every
-registered criterion or change the ranking.
-
-## Use from Python
-
-Build the pipeline once when analyzing several samples:
+This model-free example uses fixed values. It performs no model training, resampling, or Monte Carlo calibration:
 
 ```python
-from pysatl_expert.app import build_pipeline
-from pysatl_expert.reporting.pdf import generate_pdf_report
+from pysatl_expert.app import analyze_sample
 
-pipeline = build_pipeline(model_path="path/to/model.joblib")
-report = pipeline.identify_best(sample, n_bootstraps=0, random_state=42)
-generate_pdf_report(sample, report, output_path="report.pdf", mode="summary")
+result = analyze_sample(
+    [0.1, 0.4, 0.8, 1.2, 1.5],
+    distributions=["Normal"],
+    statistics=["normal__ks"],
+)
+print(result.sample_stats)
+print(result.parameters)
+print(result.statistics)  # raw statistic values, not p-values
+print(result.failures)
 ```
 
-`identify_best` does not write files or print output. `evaluate_sample` remains a
-convenience wrapper for one-off console, PDF, and PNG output.
+The caller chooses distribution names (from `pysatl_expert.distributions.DISTRIBUTION_REGISTRY`, covering 14 continuous families) and statistic IDs. Available IDs depend on the installed Criterion version; inspect `pysatl_expert.criteria.catalog.CRITERIA_SPECS`. A fitted parameter estimate and a raw statistic do not provide calibrated evidence or establish a scientific decision.
 
-## Model bundle
+## Ready methods and procedures
 
-A model bundle contains two adjacent files:
+A ready method declares its `required_statistics` (and optional `procedure_requests`) and implements `predict(sample, analysis)`. The pipeline validates declarations before computation and executes registered `StatisticProcedure` or `ProcedureAdapter` objects.
 
-- `<model>.joblib` — the serialized hierarchical model;
-- `<model>.manifest.json` — its integrity and compatibility metadata.
+P-values and critical values require a matching procedure adapter and explicit permission (`allow_calibration=True`). Results retain the procedure identity and calibration method where available. In particular, fitted-parameter raw statistics cannot use the Criterion adapter's simple-hypothesis calibrator; required calibration remains unavailable and blocks a dependent method.
 
-The manifest must have the same stem as the model. Before loading the trusted
-joblib file, the application verifies the model hash, feature schema, and runtime
-versions recorded in the manifest. Obtain both files from the same release.
+The Criterion adapter targets `pysatl-criterion` `main` (`v1.0.0`, commit `3685d7e746fd7c175e18dc9b113f1db0d4fe3455`): it reads parameter values, supported hypotheses, alternatives, and versioned statistic configuration. `parameter_mode` distinguishes a family hypothesis, explicitly known parameters, and parameters fitted from this sample. Catalog values remain raw statistics and retain their full procedure identity in `AnalysisResult.procedure_results`; `statistics` provides a detached numeric view. A failed fit still permits supported family statistics.
 
-## Reproducible training
+See [method contracts](docs/reference/core.md), [statistics and procedures](docs/reference/criteria.md), and [results and reporting](docs/reference/models.md).
 
-Training uses one local frozen CSV, which is intentionally excluded from Git. It
-must contain all active feature columns, `Target`, and a `Split` column with exactly
-`train` and `outer_test` values.
+## RF and command line
 
-Set the local CSV path in `pysatl_expert/config/feature_selection.json`, then run:
+The `pysatl-expert` CSV command and `recommend_ml` are an RF-backed path. They require a trusted model bundle consisting of a model file and adjacent manifest, compatible with the installed dependencies, Criterion revision, and feature schema. No trained bundle is included with the package.
 
-```bash
-# Select fixed Stage 1 and Stage 2 feature sets from the train partition.
-poetry run python scripts/select_features.py
-
-# Train and evaluate the final model using that fixed selection.
-poetry run python scripts/train_model.py
+```console
+poetry install
+poetry run pysatl-expert --help
 ```
 
-`select_features.py` ranks candidate inputs automatically while respecting the
-project's explicit exclusions. It writes the selected feature names and training
-configuration to `selected_features.json`. `train_model.py` validates that document,
-fits the final Stage 1 and Stage 2 forests, evaluates once on `outer_test`, and writes
-the model, metrics, and manifest.
+Criterion is fetched over public HTTPS at the exact commit pinned in
+`pyproject.toml` and `poetry.lock`; installation does not require a GitHub SSH key.
+
+For the RF path, consult [the ML adapter](docs/reference/strategy.md) and [public entry points](docs/reference/main.md) before supplying a compatible bundle. A hash check detects accidental artifact mismatch; it does not authenticate who supplied a bundle. Load only artifacts from a trusted source.
+
+## Results and reports
+
+Analysis and recommendation results retain their own evidence and failure information. Render an existing result without repeating analysis or prediction:
+
+```python
+from pysatl_expert.reporting.result_report import (
+    ReportOptions,
+    render_result_report,
+    write_result_pdf,
+)
+
+print(render_result_report(result))
+write_result_pdf(result, "output/result.pdf", ReportOptions(detail="summary"))
+```
+
+See [results and reporting](docs/reference/models.md) for result types and report options.
+
+## Tests
+
+Run the non-research tests, including small real sklearn/RF integration cases:
+
+```console
+poetry run pytest -m "not research" --ignore=tests/benchmarks
+```
+
+Run the Random Forest selection-batching equivalence check separately:
+
+```console
+poetry run pytest -m research tests/models/test_hierarchical_model.py
+```
+
+The `research` marker does not change the default selection: plain `pytest`
+still includes the research check.
