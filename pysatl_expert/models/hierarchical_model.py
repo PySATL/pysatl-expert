@@ -303,25 +303,32 @@ class HierarchicalExpertModel:
             n_jobs=n_jobs,
         )
 
-    def predict_proba(self, X_df: pd.DataFrame | np.ndarray) -> np.ndarray:
-        """Vectorized batch predict probability matrix across all distribution classes.
+    def _prediction_frame(self, values: pd.DataFrame | np.ndarray) -> pd.DataFrame:
+        if isinstance(values, pd.DataFrame):
+            return values
+        if self.feature_names is None:
+            raise RuntimeError("Model must be fitted before calling predict_proba")
+        if values.ndim != 2 or values.shape[1] != len(self.feature_names):
+            actual_features = values.shape[1] if values.ndim == 2 else "non-2D"
+            raise ValueError(
+                f"Model expected {len(self.feature_names)} features, got {actual_features}"
+            )
+        return pd.DataFrame(values, columns=self.feature_names)
 
-        Args:
-            X_df (pd.DataFrame | np.ndarray): Input feature matrix.
+    def _family_prediction(
+        self, frame: pd.DataFrame, family: str, members: list[str]
+    ) -> tuple[pd.DataFrame, np.ndarray, list[str]]:
+        features = frame[self.stage2_features.get(family, [])]
+        if family in self.stage2_models:
+            model = self.stage2_models[family]
+            return features, model.predict_proba(features), model.classes_.tolist()
+        return features, np.ones((len(frame), 1)), [members[0]]
 
-        Returns:
-            np.ndarray: Predicted probability matrix of shape (n_samples, n_classes).
-        """
-        if isinstance(X_df, np.ndarray):
-            if self.feature_names is None:
-                raise RuntimeError("Model must be fitted before calling predict_proba")
-            if X_df.ndim != 2 or X_df.shape[1] != len(self.feature_names):
-                actual_features = X_df.shape[1] if X_df.ndim == 2 else "non-2D"
-                raise ValueError(
-                    f"Model expected {len(self.feature_names)} features, got {actual_features}"
-                )
-            X_df = pd.DataFrame(X_df, columns=self.feature_names)
-
+    def _forward_with_evidence(
+        self, X_df: pd.DataFrame | np.ndarray, *, collect_evidence: bool = True
+    ) -> tuple[np.ndarray, list[dict[str, dict]] | None]:
+        """Calculate probabilities once and build per-row evidence only on request."""
+        X_df = self._prediction_frame(X_df)
         classes = self.classes_
         class_to_idx = {c: i for i, c in enumerate(classes)}
         n_samples = len(X_df)
@@ -336,6 +343,20 @@ class HierarchicalExpertModel:
         fam_probs = self.stage1_model.predict_proba(X_s1)
         fam_classes = self.stage1_model.classes_.tolist()
         fam_cls_idx = {f: i for i, f in enumerate(fam_classes)}
+        evidence = None
+        if collect_evidence:
+            evidence = [
+                {
+                    "stage1_scores": {
+                        cls: float(fam_probs[row_idx, cls_idx])
+                        for cls, cls_idx in fam_cls_idx.items()
+                    },
+                    "stage2_scores": {},
+                    "stage1_features": X_s1.iloc[row_idx].to_dict(),
+                    "stage2_features": {},
+                }
+                for row_idx in range(n_samples)
+            ]
 
         for fam_name, members in self.family_map.items():
             if fam_name not in fam_cls_idx:
@@ -344,23 +365,26 @@ class HierarchicalExpertModel:
             f_col_idx = fam_cls_idx[fam_name]
             f_probs = fam_probs[:, f_col_idx]
 
-            if fam_name in self.stage2_models:
-                m2 = self.stage2_models[fam_name]
-                feats2 = self.stage2_features[fam_name]
-                X_s2 = X_df[feats2]
-                sub_probs = m2.predict_proba(X_s2)
-                sub_classes = m2.classes_.tolist()
+            X_s2, sub_probs, sub_classes = self._family_prediction(X_df, fam_name, members)
+            for sub_idx, sub_c in enumerate(sub_classes):
+                if sub_c in class_to_idx:
+                    c_idx = class_to_idx[sub_c]
+                    proba_matrix[:, c_idx] = f_probs * sub_probs[:, sub_idx]
 
-                for sub_idx, sub_c in enumerate(sub_classes):
-                    if sub_c in class_to_idx:
-                        c_idx = class_to_idx[sub_c]
-                        proba_matrix[:, c_idx] = f_probs * sub_probs[:, sub_idx]
-            else:
-                if members and members[0] in class_to_idx:
-                    c_idx = class_to_idx[members[0]]
-                    proba_matrix[:, c_idx] = f_probs
+            if evidence is not None:
+                for row_idx, row in enumerate(evidence):
+                    row["stage2_scores"][fam_name] = {
+                        cls: float(sub_probs[row_idx, cls_idx])
+                        for cls_idx, cls in enumerate(sub_classes)
+                    }
+                    row["stage2_features"][fam_name] = X_s2.iloc[row_idx].to_dict()
 
-        return proba_matrix
+        return proba_matrix, evidence
+
+    def predict_proba(self, X_df: pd.DataFrame | np.ndarray) -> np.ndarray:
+        """Return final class probabilities, preserving the public matrix API."""
+        probabilities, _ = self._forward_with_evidence(X_df, collect_evidence=False)
+        return probabilities
 
     def predict(self, X_df: pd.DataFrame | np.ndarray) -> np.ndarray:
         """Vectorized batch prediction for Stage 1 + Stage 2.

@@ -113,7 +113,7 @@ def build_missingness_audit(
     stage2_features: dict[str, list[str]],
 ) -> dict[str, Any]:
     """Record the exact missingness policy applied during feature selection."""
-    columns = FeatureVector.TRAINING_FEATURE_NAMES
+    columns = list(FeatureVector.TRAINING_FEATURE_NAMES)
     stage1_rates = training[stage1_features].isna().mean()
     stage2_audit: dict[str, Any] = {}
     for family, members in family_map.items():
@@ -179,7 +179,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     document = build_selection_document(
         family_map=family_map,
-        feature_schema=FeatureVector.FEATURE_NAMES,
+        feature_schema=list(FeatureVector.FEATURE_NAMES),
         stage1_features=stage1_features,
         stage2_features=stage2_features,
         test_size=dataset_config["outer_test_size"],
@@ -195,7 +195,7 @@ def main(argv: list[str] | None = None) -> None:
         training, targets, family_map, stage1_features, stage2_features
     )
     document["split"].update({"training_rows": len(training), "outer_test_rows": outer_test_rows})
-    validate_selection_document(document, family_map, FeatureVector.FEATURE_NAMES)
+    validate_selection_document(document, family_map, list(FeatureVector.FEATURE_NAMES))
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = output_path.with_suffix(f"{output_path.suffix}.tmp")

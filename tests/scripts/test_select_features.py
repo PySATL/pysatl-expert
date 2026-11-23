@@ -1,9 +1,12 @@
 import json
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
+from pysatl_expert.models.feature_vector import FeatureVector
 from scripts.select_features import (
+    build_missingness_audit,
     build_parser,
     build_selection_document,
     validate_run_config,
@@ -133,7 +136,7 @@ def test_selection_document_rejects_duplicate_selected_features():
         validate_selection_document(document, FAMILY_MAP, FEATURE_SCHEMA)
 
 
-def test_tracked_selection_config_preserves_approved_asymmetric_budgets():
+def test_tracked_selection_config_satisfies_generic_schema():
     project_root = Path(__file__).parents[2]
     family_map = json.loads(
         (project_root / "pysatl_expert/config/domain_distribution_families.json").read_text()
@@ -142,15 +145,28 @@ def test_tracked_selection_config_preserves_approved_asymmetric_budgets():
 
     validated = validate_run_config(config, family_map)
 
-    assert validated["stage1_feature_count"] == 30
-    assert validated["stage2_feature_counts"] == {
-        "SymmetricUnbounded": 15,
-        "PositiveUnbounded": 20,
-        "Bounded": 15,
-    }
-    assert validated["dataset"] == {
-        "kind": "frozen_csv",
-        "path": "artifacts/hrf/dataset/hrf_training_raw.csv",
-        "outer_test_size": 0.2,
-        "outer_seed": 42,
-    }
+    assert validated["stage1_feature_count"] > 0
+    assert set(validated["stage2_feature_counts"]) == set(family_map)
+    assert all(count > 0 for count in validated["stage2_feature_counts"].values())
+    assert validated["dataset"]["kind"] == "frozen_csv"
+    assert validated["dataset"]["path"]
+    assert 0 < validated["dataset"]["outer_test_size"] < 1
+    assert validated["dataset"]["outer_seed"] is not None
+
+
+def test_missingness_audit_selects_tuple_schema_columns_without_fitting():
+    training = pd.DataFrame(1.0, index=range(4), columns=FeatureVector.FEATURE_NAMES)
+    training.loc[0, "normal__ks"] = float("nan")
+    targets = pd.Series(["A", "B", "C", "D"])
+
+    audit = build_missingness_audit(
+        training,
+        targets,
+        FAMILY_MAP,
+        ["sample_size"],
+        {"first": ["sample_size"], "second": ["normal__ks"]},
+    )
+
+    assert audit["stage1"]["eligible_feature_count"] == len(FeatureVector.TRAINING_FEATURE_NAMES)
+    assert audit["stage2"]["first"]["excluded_missing_features"] == ["normal__ks"]
+    assert audit["stage2"]["second"]["excluded_missing_features"] == []

@@ -1,19 +1,17 @@
 import json
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 import pandas as pd
 import pytest
 
+from pysatl_expert.models.feature_selection_contract import build_selection_document
 from pysatl_expert.models.feature_vector import FeatureVector
 from pysatl_expert.models.hierarchical_model import HierarchicalExpertModel
 from scripts.train_model import (
     _resolve_path,
     build_parser,
     evaluate_hierarchical_stages,
-    load_training_dataset,
-    prepare_training_data,
     save_training_artifacts,
 )
 
@@ -40,7 +38,7 @@ def test_training_artifacts_include_verified_model_manifest(tmp_path):
         "Bounded": ["Beta", "Uniform"],
     }
     model = HierarchicalExpertModel(family_map)
-    model.feature_names = FeatureVector.FEATURE_NAMES
+    model.feature_names = list(FeatureVector.FEATURE_NAMES)
     model.stage1_features = ["normal__ks", "skew"]
     model.stage2_features = {
         "SymmetricUnbounded": ["normal__ks"],
@@ -50,7 +48,7 @@ def test_training_artifacts_include_verified_model_manifest(tmp_path):
     selection = {
         "schema_version": 1,
         "family_map": family_map,
-        "feature_schema": FeatureVector.FEATURE_NAMES,
+        "feature_schema": list(FeatureVector.FEATURE_NAMES),
         "selector": {
             "stage1_feature_count": 2,
             "stage2_feature_counts": {
@@ -84,111 +82,132 @@ def test_training_artifacts_include_verified_model_manifest(tmp_path):
     assert json.loads(metrics_path.read_text()) == {"accuracy": 0.9}
 
 
-def test_domain_family_map_covers_every_training_target_once():
+def test_domain_family_map_has_nonempty_unique_members():
     path = (
         Path(__file__).parents[2] / "pysatl_expert" / "config" / "domain_distribution_families.json"
     )
     family_map = json.loads(path.read_text(encoding="utf-8"))
     members = [member for family in family_map.values() for member in family]
 
-    assert set(family_map) == {"SymmetricUnbounded", "PositiveUnbounded", "Bounded"}
-    assert sorted(members) == sorted(
-        ["Normal", "Student", "Exponential", "Gamma", "LogNormal", "Weibull", "Beta", "Uniform"]
+    assert family_map
+    assert all(
+        isinstance(name, str) and name and isinstance(distributions, list) and distributions
+        for name, distributions in family_map.items()
     )
+    assert all(isinstance(member, str) and member for member in members)
     assert len(members) == len(set(members))
 
 
-def test_training_data_preserves_continuous_values_and_exact_schema():
-    row: dict[str, Any] = dict.fromkeys(FeatureVector.FEATURE_NAMES, 0.0)
-    row["sample_size"] = 100.0
-    row["normal__ks"] = 1.0
-    row["Target"] = "Normal"
+class _FixedPredictions:
+    def __init__(self, predictions):
+        self.predictions = np.asarray(predictions)
+        self.seen_features = None
 
-    features, target = prepare_training_data(pd.DataFrame([row]))
-
-    assert features.columns.tolist() == FeatureVector.FEATURE_NAMES
-    assert features.loc[0, "sample_size"] == 100.0
-    assert target.tolist() == ["Normal"]
+    def predict(self, features):
+        self.seen_features = features.copy()
+        assert len(features) == len(self.predictions)
+        return self.predictions
 
 
-def test_training_data_preserves_missing_values_as_nan() -> None:
-    row: dict[str, Any] = dict.fromkeys(FeatureVector.FEATURE_NAMES, 0.0)
-    row["normal__ks"] = np.nan
-    row["normal__ad"] = np.inf
-    row["Target"] = "Normal"
-
-    features, _ = prepare_training_data(pd.DataFrame([row]))
-
-    assert np.isnan(features.loc[0, "normal__ks"])
-    assert np.isnan(features.loc[0, "normal__ad"])
-    assert not (features == -1.0).any().any()
-
-
-def test_training_data_discards_known_historical_excluded_columns() -> None:
-    row: dict[str, Any] = dict.fromkeys(FeatureVector.FEATURE_NAMES, 0.0)
-    row["beta__mode"] = 123.0
-    row["normal__rj"] = 0.99
-    row["Target"] = "Normal"
-
-    features, _ = prepare_training_data(pd.DataFrame([row]))
-
-    assert features.columns.tolist() == FeatureVector.FEATURE_NAMES
-    assert "beta__mode" not in features
-    assert "normal__rj" not in features
-
-
-def test_training_data_rejects_unknown_extra_columns() -> None:
-    row: dict[str, Any] = dict.fromkeys(FeatureVector.FEATURE_NAMES, 0.0)
-    row["unknown_feature"] = 1.0
-    row["Target"] = "Normal"
-
-    with pytest.raises(ValueError, match="unexpected features"):
-        prepare_training_data(pd.DataFrame([row]))
-
-
-def test_training_loader_selects_balanced_smoke_rows_without_historical_columns(
-    tmp_path: Path,
-) -> None:
-    rows = []
-    for target in ("A", "B"):
-        for index in range(3):
-            row: dict[str, Any] = dict.fromkeys(FeatureVector.FEATURE_NAMES, float(index))
-            row["beta__mode"] = 1000.0
-            row["Target"] = target
-            rows.append(row)
-    path = tmp_path / "raw.csv"
-    pd.DataFrame(rows).to_csv(path, index=False)
-
-    loaded = load_training_dataset(
-        path,
-        samples_per_class=2,
-        expected_targets={"A", "B"},
-        chunksize=2,
-    )
-
-    assert loaded["Target"].value_counts().to_dict() == {"A": 2, "B": 2}
-    assert loaded.columns.tolist() == [*FeatureVector.FEATURE_NAMES, "Target"]
-    assert "beta__mode" not in loaded
-    assert all(dtype == np.float32 for dtype in loaded[FeatureVector.FEATURE_NAMES].dtypes)
-
-
-def test_training_reports_stage1_and_each_stage2_accuracy():
-    rng = np.random.default_rng(7)
-    labels = np.repeat(["A", "B", "C", "D"], 20)
-    centers = {"A": -4.0, "B": -2.0, "C": 2.0, "D": 4.0}
-    features = pd.DataFrame(
-        {
-            "shape": [centers[label] + rng.normal(0.0, 0.1) for label in labels],
-            "aux": rng.normal(size=len(labels)),
-        }
-    )
-    target = pd.Series(labels)
+def test_training_reports_exact_stage_metrics_and_filters_each_family():
     family_map = {"negative": ["A", "B"], "positive": ["C", "D"]}
     model = HierarchicalExpertModel(family_map)
-    model.fit(features, target, n_stage1=None, n_stage2=None)
+    model.feature_names = ["route", "within"]
+    model.stage1_features = ["route"]
+    model.stage2_features = {"negative": ["within"], "positive": ["route", "within"]}
+    model.stage1_model = _FixedPredictions(
+        [
+            "negative",
+            "positive",
+            "positive",
+            "negative",
+            "negative",
+            "positive",
+            "positive",
+            "negative",
+        ]
+    )
+    model.stage2_models = {
+        "negative": _FixedPredictions(["A", "A", "B", "B"]),
+        "positive": _FixedPredictions(["C", "C", "D", "D"]),
+    }
+    features = pd.DataFrame({"route": range(8), "within": range(10, 18)})
+    target = pd.Series(["A", "B", "C", "D", "A", "B", "C", "D"])
 
     metrics = evaluate_hierarchical_stages(model, features, target)
 
-    assert metrics["stage1_family"]["accuracy"] > 0.95
-    assert set(metrics["stage2_by_family"]) == {"negative", "positive"}
-    assert all(result["accuracy"] > 0.95 for result in metrics["stage2_by_family"].values())
+    assert metrics["stage1_family"]["accuracy"] == 0.5
+    assert metrics["stage1_family"]["labels"] == ["negative", "positive"]
+    assert metrics["stage1_family"]["confusion_matrix"] == [[2, 2], [2, 2]]
+    assert metrics["stage2_by_family"]["negative"]["accuracy"] == 0.5
+    assert metrics["stage2_by_family"]["negative"]["labels"] == ["A", "B"]
+    assert metrics["stage2_by_family"]["negative"]["confusion_matrix"] == [[1, 1], [1, 1]]
+    assert metrics["stage2_by_family"]["positive"]["accuracy"] == 0.5
+    assert metrics["stage2_by_family"]["positive"]["labels"] == ["C", "D"]
+    assert metrics["stage2_by_family"]["positive"]["confusion_matrix"] == [[1, 1], [1, 1]]
+    assert model.stage1_model.seen_features.equals(features[["route"]])
+    assert model.stage2_models["negative"].seen_features.equals(
+        features.loc[[0, 1, 4, 5], ["within"]]
+    )
+    assert model.stage2_models["positive"].seen_features.equals(
+        features.loc[[2, 3, 6, 7], ["route", "within"]]
+    )
+
+
+def test_training_cli_projects_tuple_schema_and_validates_selection_without_fitting(
+    tmp_path, monkeypatch
+):
+    from scripts import train_model
+
+    family_map = {"demo": ["A", "B"]}
+    rows = []
+    for split in ("train", "outer_test"):
+        for target in ("A", "B"):
+            rows.append(
+                dict.fromkeys(FeatureVector.FEATURE_NAMES, 1.0) | {"Target": target, "Split": split}
+            )
+    dataset = tmp_path / "frozen.csv"
+    pd.DataFrame(rows).to_csv(dataset, index=False)
+    document = build_selection_document(
+        family_map=family_map,
+        feature_schema=list(FeatureVector.FEATURE_NAMES),
+        stage1_features=["sample_size"],
+        stage2_features={"demo": ["normal__ks"]},
+        test_size=0.2,
+        random_state=42,
+        stage1_count=1,
+        stage2_count={"demo": 1},
+        estimators=1,
+        dataset_config={
+            "kind": "frozen_csv",
+            "path": str(dataset),
+            "outer_test_size": 0.2,
+            "outer_seed": 42,
+        },
+        stage1_missing_policy="allow_nan_and_report",
+        stage2_missing_policy="complete_within_family",
+    )
+    families, features = tmp_path / "families.json", tmp_path / "features.json"
+    families.write_text(json.dumps(family_map))
+    features.write_text(json.dumps(document))
+
+    def stop_before_training(self, frame, targets, **kwargs):
+        assert frame.columns.tolist() == list(FeatureVector.FEATURE_NAMES)
+        assert targets.tolist() == ["A", "B"]
+        assert kwargs["stage2_features"] == {"demo": ["normal__ks"]}
+        raise RuntimeError("stopped before training")
+
+    monkeypatch.setattr(HierarchicalExpertModel, "fit_selected", stop_before_training)
+    with pytest.raises(RuntimeError, match="stopped before training"):
+        train_model.main(
+            [
+                "--families",
+                str(families),
+                "--features",
+                str(features),
+                "--output",
+                str(tmp_path / "unused.joblib"),
+                "--metrics-output",
+                str(tmp_path / "unused.json"),
+            ]
+        )

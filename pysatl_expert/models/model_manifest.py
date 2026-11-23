@@ -4,6 +4,7 @@ import hashlib
 import importlib.metadata
 import json
 import platform
+import re
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,8 @@ from typing import Any
 MANIFEST_FORMAT_VERSION = 1
 _MAX_MANIFEST_BYTES = 1_000_000
 _HASH_CHUNK_BYTES = 1024 * 1024
+_CRITERION_REVISION_ERROR = "Criterion source revision is not validated for this model"
+_GIT_REVISION_PATTERN = re.compile(r"^[0-9a-fA-F]{40}$")
 _RUNTIME_DISTRIBUTIONS = {
     "numpy": "numpy",
     "scipy": "scipy",
@@ -84,6 +87,33 @@ def _package_versions() -> dict[str, str]:
     }
 
 
+def _criterion_revision_from_direct_url(direct_url_text: str | None) -> str:
+    """Read the installed Criterion source commit recorded by pip/Poetry."""
+    try:
+        if not direct_url_text:
+            raise ValueError("direct_url.json is missing")
+        direct_url = json.loads(direct_url_text)
+        vcs_info = direct_url["vcs_info"]
+        if vcs_info["vcs"] != "git":
+            raise ValueError("installed Criterion source is not Git")
+        revision = vcs_info["commit_id"]
+        if not isinstance(revision, str) or not _GIT_REVISION_PATTERN.fullmatch(revision):
+            raise ValueError("commit_id is not a full Git SHA")
+        return revision.lower()
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise ModelCompatibilityError(_CRITERION_REVISION_ERROR) from exc
+
+
+def _installed_criterion_revision() -> str:
+    """Return Criterion's installed VCS commit, never a project-file guess."""
+    try:
+        distribution = importlib.metadata.distribution("pysatl-criterion")
+        direct_url_text = distribution.read_text("direct_url.json")
+    except (importlib.metadata.PackageNotFoundError, OSError, ValueError) as exc:
+        raise ModelCompatibilityError(_CRITERION_REVISION_ERROR) from exc
+    return _criterion_revision_from_direct_url(direct_url_text)
+
+
 def _portable_feature_configuration(selection_document: dict[str, Any]) -> dict[str, Any]:
     """Keep only model-relevant fields; training paths are intentionally excluded."""
     required = ("schema_version", "family_map", "feature_schema", "selector", "selection")
@@ -139,6 +169,7 @@ def build_model_manifest(
         },
         "runtime": _runtime_versions(),
         "packages": _package_versions(),
+        "criterion_revision": _installed_criterion_revision(),
         "classes": classes,
         "families": family_map,
         "feature_schema": {
@@ -290,18 +321,18 @@ def _validate_feature_configuration(
     manifest: dict[str, Any], expected_feature_schema: list[str]
 ) -> None:
     families = _require_mapping(manifest.get("families"), "families")
-    if len(families) != 3 or any(
+    if not families or any(
         not isinstance(members, list)
         or not members
         or not all(isinstance(member, str) for member in members)
         for members in families.values()
     ):
-        raise ModelCompatibilityError("Model manifest must contain three valid families")
+        raise ModelCompatibilityError("Model manifest must contain at least one valid family")
     classes = manifest.get("classes")
     expected_classes = sorted(member for members in families.values() for member in members)
     if (
         classes != expected_classes
-        or len(expected_classes) != 8
+        or len(expected_classes) < 2
         or len(classes) != len(set(classes))
     ):
         raise ModelCompatibilityError("Model manifest classes and families are inconsistent")
@@ -334,6 +365,14 @@ def verify_model_manifest(model_path: str | Path) -> dict[str, Any]:
     if not path.is_file():
         raise FileNotFoundError(f"Model file not found: {path}")
     manifest = _read_manifest(manifest_path)
+    recorded_criterion_revision = manifest.get("criterion_revision")
+    current_criterion_revision = _installed_criterion_revision()
+    if (
+        not isinstance(recorded_criterion_revision, str)
+        or not _GIT_REVISION_PATTERN.fullmatch(recorded_criterion_revision)
+        or recorded_criterion_revision.lower() != current_criterion_revision
+    ):
+        raise ModelCompatibilityError(_CRITERION_REVISION_ERROR)
     if manifest.get("format_version") != MANIFEST_FORMAT_VERSION:
         raise ModelCompatibilityError("Unsupported model manifest format version")
     _validate_model_file(path, manifest)

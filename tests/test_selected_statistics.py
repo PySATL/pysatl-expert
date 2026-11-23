@@ -16,7 +16,7 @@ from pysatl_expert.strategy.ml_strategy import MLStrategy
 
 def make_strategy():
     model = HierarchicalExpertModel({"Symmetric": ["Normal", "Student"]})
-    model.feature_names = FeatureVector.FEATURE_NAMES
+    model.feature_names = list(FeatureVector.FEATURE_NAMES)
     model.stage1_features = ["normal__ks", "sample_size"]
     model.stage2_features = {"Symmetric": ["normal__ad", "sample_size"]}
 
@@ -34,6 +34,7 @@ def make_strategy():
     model.stage2_models = {"Symmetric": Forest(["Normal", "Student"])}
     strategy = object.__new__(MLStrategy)
     strategy.model = model
+    strategy._feature_names = list(FeatureVector.FEATURE_NAMES)
     strategy._class_names = model.classes_.tolist()
     return strategy
 
@@ -53,6 +54,7 @@ def test_unknown_model_feature_fails_before_calculation():
 def test_nonhierarchical_model_keeps_full_schema():
     strategy = object.__new__(MLStrategy)
     strategy.model = SimpleNamespace()
+    strategy._feature_names = list(FeatureVector.FEATURE_NAMES)
     assert strategy.required_features == frozenset(FeatureVector.FEATURE_NAMES)
 
 
@@ -88,29 +90,37 @@ def test_selector_rejects_model_features_missing_from_installed_criterion():
         )
 
 
-def test_pipeline_calculates_only_selected_statistics_for_original_and_bootstraps(monkeypatch):
+def test_pipeline_calculates_only_selected_statistics_for_original_sample(monkeypatch):
     from pysatl_expert.criteria.calculate.generic import GenericCriterion
 
     strategy = make_strategy()
     components = PipelineComponents(
         distributions=[NormalDistribution()],
         criterion_selector=CriterionSelector(feature_names=strategy.required_features),
-        strategy=strategy,
+        method=strategy,
         feature_extractor=FeatureExtractor(),
     )
     pipeline = DistributionPipeline(components)
     sample = np.random.default_rng(19).normal(size=100)
     calls = []
-    original = GenericCriterion.calculate
+    original = GenericCriterion.evaluate
 
     def record(criterion, *args):
         calls.append(criterion.name)
         return original(criterion, *args)
 
-    monkeypatch.setattr(GenericCriterion, "calculate", record)
-    selected = pipeline.identify_best(sample, n_bootstraps=2, random_state=42)
-    assert len(calls) == 2 * 3
-    assert np.isnan(selected.all_scores["Normal"]["sw"])
+    monkeypatch.setattr(GenericCriterion, "evaluate", record)
+    selected = pipeline.recommend(
+        sample,
+        method=strategy,
+        procedures={},
+        analysis_provider=pipeline.analyze_catalog,
+        n_bootstraps=0,
+        random_state=42,
+    )
+    assert len(calls) == 2
+    assert "sw" not in selected.analysis.statistics["Normal"]
+    assert "bootstrap" not in selected.diagnostics
 
 
 def test_dataset_selector_still_calculates_full_registry():

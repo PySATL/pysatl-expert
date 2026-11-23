@@ -1,25 +1,39 @@
 import numpy as np
 import pytest
 
-from pysatl_expert.models.report import Report
+from pysatl_expert.models.analysis_result import AnalysisResult, RecommendationResult
+from pysatl_expert.reporting.common import get_scipy_dist
+from pysatl_expert.reporting.plot import generate_plot_report
+from pysatl_expert.reporting.result_report import (
+    ReportOptions,
+    render_result_report,
+    write_result_pdf,
+)
 
 
-def test_pdf_and_plot_have_reporting_home():
-    from pysatl_expert.reporting.pdf import generate_pdf_report
-    from pysatl_expert.reporting.plot import generate_plot_report
+def _result(snapshot=(0.0, 0.5, 1.0), params=None):
+    analysis = AnalysisResult(
+        sample_stats=(
+            {"n": len(snapshot), "mean": float(np.mean(snapshot))} if snapshot is not None else {}
+        ),
+        parameters={"Uniform": params} if params is not None else {},
+        statistics={},
+        failures={},
+        sample_snapshot=snapshot,
+    )
+    return RecommendationResult(
+        analysis,
+        {"label": "Uniform", "scores": {"Uniform": 0.9, "Beta": 0.1}},
+    )
 
-    assert generate_pdf_report.__module__ == "pysatl_expert.reporting.pdf"
-    assert generate_plot_report.__module__ == "pysatl_expert.reporting.plot"
 
+def test_supported_reporting_entrypoints_import_and_run(tmp_path):
+    result = _result()
 
-def test_fitted_distribution_adapter_is_shared_between_reports():
-    from pysatl_expert.reporting import pdf, plot
-    from pysatl_expert.reporting.common import get_scipy_dist
-
-    assert pdf._get_scipy_dist is get_scipy_dist
-    assert plot._get_scipy_dist is get_scipy_dist
-    fitted = get_scipy_dist("Uniform", {"a": 2.0, "b": 5.0})
-    np.testing.assert_allclose(fitted.cdf([2.0, 3.5, 5.0]), [0.0, 0.5, 1.0])
+    assert "Answer: Uniform" in render_result_report(result)
+    pdf_path = tmp_path / "report.pdf"
+    assert write_result_pdf(result, pdf_path) == pdf_path
+    assert pdf_path.read_bytes().startswith(b"%PDF-")
 
 
 @pytest.mark.parametrize(
@@ -36,8 +50,6 @@ def test_fitted_distribution_adapter_is_shared_between_reports():
     ],
 )
 def test_fitted_distribution_adapter_accepts_each_runtime_fit_format(name, params):
-    from pysatl_expert.reporting.common import get_scipy_dist
-
     assert get_scipy_dist(name, params) is not None
 
 
@@ -52,50 +64,62 @@ def test_fitted_distribution_adapter_accepts_each_runtime_fit_format(name, param
         ("Gamma", {"shape": -1.0, "loc": 0.0, "scale": 2.0}),
         ("Weibull", {"shape": 1.5, "loc": 0.0}),
         ("Beta", {"alpha": 2.0}),
+        ("Normal", {"mu": "invalid", "std": 1.0}),
     ],
 )
-def test_fitted_distribution_adapter_never_invents_missing_parameters(name, params):
-    from pysatl_expert.reporting.common import get_scipy_dist
-
+def test_fitted_distribution_adapter_marks_incomplete_parameters_unavailable(name, params):
     assert get_scipy_dist(name, params) is None
 
 
-def test_plot_report_writes_png_and_closes_figure(tmp_path):
+def test_plot_report_writes_png_to_nested_parent_and_closes_figure(tmp_path):
     import matplotlib.pyplot as plt
 
-    from pysatl_expert.reporting.plot import generate_plot_report
-
-    report = Report(
-        "Normal",
-        0.8,
-        {},
-        parameters={"mu": 0.0, "std": 1.0},
-        final_ranks={"Normal": 0.8, "Student": 0.2},
-    )
+    result = _result(params={"a": 0.0, "b": 1.0})
     initial_figures = plt.get_fignums()
-    path = tmp_path / "report.png"
-    assert generate_plot_report(np.linspace(-2.0, 2.0, 20), report, path) == path
+    path = tmp_path / "nested" / "report.png"
+
+    assert generate_plot_report(result, path) == path
     assert path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
     assert plt.get_fignums() == initial_figures
 
 
-def test_plot_report_does_not_draw_a_fitted_curve_without_fitted_parameters(tmp_path, monkeypatch):
-    from matplotlib.axes import Axes
+def test_pdf_and_png_share_the_same_result_chart_helper(tmp_path, monkeypatch):
+    from pysatl_expert.reporting import plot
 
-    from pysatl_expert.reporting.plot import generate_plot_report
+    generated = []
+    original = plot._build_result_figure
 
-    labels = []
-    original_plot = Axes.plot
+    def capture(result):
+        generated.append(result)
+        return original(result)
 
-    def capture(axis, *args, **kwargs):
-        labels.append(kwargs.get("label"))
-        return original_plot(axis, *args, **kwargs)
+    monkeypatch.setattr(plot, "_build_result_figure", capture)
+    result = _result(params={"a": 0.0, "b": 1.0})
+    write_result_pdf(result, tmp_path / "report.pdf", ReportOptions())
+    generate_plot_report(result, tmp_path / "report.png", ReportOptions())
+    assert generated == [result, result]
 
-    monkeypatch.setattr(Axes, "plot", capture)
-    report = Report("Normal", 0.8, {}, final_ranks={"Normal": 0.8})
 
-    generate_plot_report(np.linspace(-2.0, 2.0, 20), report, tmp_path / "report.png")
+def test_plot_without_snapshot_shows_unavailable_reason_saves_png_and_closes_figure(
+    tmp_path, monkeypatch
+):
+    import matplotlib.pyplot as plt
+    from matplotlib.figure import Figure
 
-    assert all(
-        label is None or ("Fitted" not in label and "Theoretical" not in label) for label in labels
-    )
+    captured_text = []
+    savefig = Figure.savefig
+
+    def capture(figure, *args, **kwargs):
+        captured_text.extend(text.get_text() for text in figure.texts)
+        return savefig(figure, *args, **kwargs)
+
+    monkeypatch.setattr(Figure, "savefig", capture)
+    result = _result(snapshot=None)
+    output = tmp_path / "unavailable.png"
+    initial_figures = plt.get_fignums()
+
+    generate_plot_report(result, output)
+
+    assert output.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+    assert any("Charts unavailable: no sample snapshot" in text for text in captured_text)
+    assert plt.get_fignums() == initial_figures

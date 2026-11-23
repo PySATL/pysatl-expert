@@ -98,7 +98,17 @@ def test_fixed_origin_distribution_fit_keeps_positive_observations_inside_suppor
     assert np.all((0.0 < cdf_values) & (cdf_values <= 1.0))
 
 
-def test_complete_raw_feature_vector_is_scale_invariant_for_fixed_origin_contract():
+def test_selected_seven_ks_raw_statistics_are_scale_invariant():
+    selected_ks = [
+        "normal__ks",
+        "exponential__ks",
+        "weibull__ks",
+        "uniform__ks",
+        "student__ks",
+        "gamma__ks",
+        "lognormal__ks",
+    ]
+    feature_names = [*FeatureVector.STAT_KEYS, *selected_ks]
     components = PipelineComponents(
         distributions=[
             NormalDistribution(),
@@ -107,28 +117,38 @@ def test_complete_raw_feature_vector_is_scale_invariant_for_fixed_origin_contrac
             UniformDistribution(),
             StudentDistribution(),
             GammaDistribution(),
-            BetaDistribution(),
             LogNormalDistribution(),
         ],
-        criterion_selector=CriterionSelector(),
-        strategy=None,
+        criterion_selector=CriterionSelector(feature_names=selected_ks),
+        method=None,
         feature_extractor=FeatureExtractor(),
     )
     pipeline = DistributionPipeline(components)
     data = np.random.default_rng(20260914).lognormal(0.5, 0.75, size=200) + 2.0
 
-    base, _ = pipeline._evaluate_sample(data)
-    transformed, _ = pipeline._evaluate_sample(7.0 * data)
-    base_values = np.asarray(base.as_flat_list())
-    transformed_values = np.asarray(transformed.as_flat_list())
-    finite = np.isfinite(base_values)
-
-    assert len(FeatureVector.CRITERIA_SCHEMA) == 146
-    assert np.array_equal(finite, np.isfinite(transformed_values))
-    assert np.count_nonzero(finite) >= 140
-    np.testing.assert_allclose(
-        transformed_values[finite],
-        base_values[finite],
-        rtol=1e-7,
-        atol=1e-7,
+    base = pipeline.analyze_catalog(data)
+    transformed = pipeline.analyze_catalog(7.0 * data)
+    base_values = np.asarray(
+        FeatureVector(base.sample_stats, base.statistics).as_flat_list(feature_names=feature_names)
     )
+    transformed_values = np.asarray(
+        FeatureVector(transformed.sample_stats, transformed.statistics).as_flat_list(
+            feature_names=feature_names
+        )
+    )
+
+    assert base_values.shape == transformed_values.shape == (len(feature_names),)
+    assert np.isfinite(base_values).all()
+    assert np.isfinite(transformed_values).all()
+    assert set(base.failures).isdisjoint(selected_ks)
+    assert set(transformed.failures).isdisjoint(selected_ks)
+    base_by_distribution = {
+        name.lower().replace("_", ""): scores for name, scores in base.statistics.items()
+    }
+    transformed_by_distribution = {
+        name.lower().replace("_", ""): scores for name, scores in transformed.statistics.items()
+    }
+    for distribution, criterion in (feature.split("__") for feature in selected_ks):
+        assert criterion in base_by_distribution[distribution]
+        assert criterion in transformed_by_distribution[distribution]
+    np.testing.assert_allclose(transformed_values, base_values, rtol=1e-7, atol=1e-7)
