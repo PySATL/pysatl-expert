@@ -70,8 +70,8 @@ for entry in SKIPPED_CRITERIA:
 
 ## Configured Criterion adapter
 
-::: pysatl_expert.criteria.criterion_adapter
+::: pysatl_expert.criteria.adapters.criterion_adapter
 
 ## SciPy procedure adapter
 
-::: pysatl_expert.criteria.scipy_adapter
+::: pysatl_expert.criteria.adapters.scipy_adapter

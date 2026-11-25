@@ -147,10 +147,10 @@ def evaluate_sample(
 
     if save_plot:
         plot_file = generate_plot_report(result, output_path=plot_path, options=options)
-        print(f"🖼️ High-resolution 4-panel plot saved to: '{plot_file}'\n")
+        print(f"High-resolution 4-panel plot saved to: '{plot_file}'\n")
 
     if save_pdf:
         pdf_file = write_result_pdf(result, path=pdf_path, options=options)
-        print(f"📄 PDF report saved to: '{pdf_file}'\n")
+        print(f"PDF report saved to: '{pdf_file}'\n")
 
     return result

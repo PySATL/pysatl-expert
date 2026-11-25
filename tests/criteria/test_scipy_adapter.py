@@ -7,8 +7,8 @@ from scipy.stats import shapiro
 
 from pysatl_expert.core.pipeline_components import PipelineComponents
 from pysatl_expert.core.recommendation import ProcedureRequest
-from pysatl_expert.criteria.criterion_adapter import CriterionAdapter
-from pysatl_expert.criteria.scipy_adapter import ScipyShapiroAdapter
+from pysatl_expert.criteria.adapters.criterion_adapter import CriterionAdapter
+from pysatl_expert.criteria.adapters.scipy_adapter import ScipyShapiroAdapter
 from pysatl_expert.models.analysis_result import ProcedureResult
 from pysatl_expert.models.feature_extractor import FeatureExtractor
 from pysatl_expert.pipeline import DistributionPipeline

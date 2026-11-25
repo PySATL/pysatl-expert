@@ -5,7 +5,66 @@ import scipy.stats as st
 from pysatl_expert.app import analyze_sample
 from pysatl_expert.criteria.catalog import DISTRIBUTIONS
 from pysatl_expert.distributions import DISTRIBUTION_REGISTRY, create_all_distributions
+from pysatl_expert.distributions.exponential import ExponentialDistribution
+from pysatl_expert.distributions.normal import NormalDistribution
+from pysatl_expert.distributions.weibull import WeibullDistribution
 from pysatl_expert.reporting.common import get_scipy_dist
+
+
+def test_normal_distribution_logic():
+    dist = NormalDistribution()
+    data = np.array([1.0, 2.0, 3.0])
+
+    params = dist.fit(data)
+    assert "mu" in params
+    assert "std" in params
+    assert isinstance(params["mu"], float)
+
+    pdf = dist.pdf(data, params)
+    cdf = dist.cdf(data, params)
+
+    assert pdf.shape == (3,)
+    assert cdf.shape == (3,)
+    assert np.all(cdf >= 0) and np.all(cdf <= 1)
+    assert dist.support == (-np.inf, np.inf)
+
+
+def test_exponential_distribution_logic():
+    dist = ExponentialDistribution()
+    data = np.array([1.0, 2.0, 5.0])
+
+    params = dist.fit(data)
+    assert "lambda" in params
+    assert "loc" in params
+    assert params["lambda"] > 0
+    assert params["loc"] == 0.0
+
+    pdf = dist.pdf(data, params)
+    cdf = dist.cdf(data, params)
+
+    assert pdf.shape == (3,)
+    assert cdf.shape == (3,)
+    assert np.all(cdf >= 0) and np.all(cdf <= 1)
+    assert dist.support == (0.0, np.inf)
+
+
+def test_weibull_distribution_logic():
+    dist = WeibullDistribution()
+    data = np.array([0.5, 1.5, 2.5])
+
+    params = dist.fit(data)
+    assert "shape" in params
+    assert "loc" in params
+    assert "scale" in params
+    assert params["loc"] == 0.0
+
+    pdf = dist.pdf(data, params)
+    cdf = dist.cdf(data, params)
+
+    assert pdf.shape == (3,)
+    assert cdf.shape == (3,)
+    assert np.all(cdf >= 0) and np.all(cdf <= 1)
+    assert dist.support == (0.0, np.inf)
 
 
 def test_central_distribution_registry_matches_catalog_keys():
@@ -64,7 +123,7 @@ def test_central_distribution_registry_matches_catalog_keys():
         ),
     ],
 )
-def test_new_distribution_fits_evaluates_cdf_and_runs_catalog_criteria(name, sample, statistics):
+def test_distribution_fits_evaluates_cdf_and_runs_catalog_criteria(name, sample, statistics):
     dist = DISTRIBUTION_REGISTRY[name]()
     params = dist.fit(sample)
     assert all(np.isfinite(value) for value in params.values())
@@ -89,7 +148,7 @@ def test_new_distribution_fits_evaluates_cdf_and_runs_catalog_criteria(name, sam
     "name",
     ["Pareto", "LogLogistic", "InverseGamma", "ExponentiatedWeibull"],
 )
-def test_positive_new_distributions_reject_non_positive_observations(name):
+def test_positive_distributions_reject_non_positive_observations(name):
     dist = DISTRIBUTION_REGISTRY[name]()
     with pytest.raises(ValueError, match="strictly positive"):
         dist.fit(np.array([0.0, 1.0, 2.0, 3.0]))

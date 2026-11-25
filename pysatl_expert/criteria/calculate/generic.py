@@ -9,7 +9,7 @@ from pysatl_criterion.statistics.goodness_of_fit.goodness_of_fit_statistic impor
 )
 
 from pysatl_expert.core.criterion import AbstractCriterion
-from pysatl_expert.criteria.criterion_adapter import CriterionAdapter
+from pysatl_expert.criteria.adapters.criterion_adapter import CriterionAdapter
 from pysatl_expert.criteria.parameters import (
     family_parameters_for_statistic,
     fitted_parameters_for_statistic,

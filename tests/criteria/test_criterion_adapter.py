@@ -7,7 +7,7 @@ from pysatl_criterion.statistics.alternative import RightAlternative
 
 from pysatl_expert.core.pipeline_components import PipelineComponents
 from pysatl_expert.core.recommendation import ProcedureRequest
-from pysatl_expert.criteria.criterion_adapter import CriterionAdapter
+from pysatl_expert.criteria.adapters.criterion_adapter import CriterionAdapter
 from pysatl_expert.models.analysis_result import AnalysisResult, ProcedureResult
 from pysatl_expert.models.feature_extractor import FeatureExtractor
 from pysatl_expert.pipeline import DistributionPipeline

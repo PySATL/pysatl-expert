@@ -2,9 +2,9 @@ import numpy as np
 import pytest
 from pysatl_criterion.distribution import WeibullDistributionDescriptor
 
+from pysatl_expert.criteria.adapters.criterion_adapter import CriterionAdapter
 from pysatl_expert.criteria.calculate.generic import GenericCriterion
 from pysatl_expert.criteria.catalog import CRITERIA_SPEC_BY_KEY, CRITERIA_SPECS
-from pysatl_expert.criteria.criterion_adapter import CriterionAdapter
 from pysatl_expert.distributions import (
     BetaDistribution,
     ExponentialDistribution,
