@@ -57,6 +57,27 @@ jobs:
       - name: Check patch formatting
         run: git diff --check
 
+  docs:
+    name: Documentation requirements build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install documentation dependencies
+        run: python -m pip install -r docs/requirements-docs.txt
+
+      - name: Build public documentation
+        run: python -m mkdocs build --strict --config-file mkdocs.yml
+
   test:
     name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
@@ -107,7 +128,7 @@ jobs:
 
   build:
     name: Build package
-    needs: [quality, test, pre-commit]
+    needs: [quality, test, pre-commit, docs]
     runs-on: ubuntu-22.04
     timeout-minutes: 15
 

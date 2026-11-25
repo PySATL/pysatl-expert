@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 from pysatl_expert.criteria.catalog import CRITERIA_SPECS, RAW_CRITERIA_EXCLUSIONS
 
 
@@ -10,30 +12,26 @@ class FeatureVector:
     Aggregates continuous sample statistics and GoF test results into a fixed-length vector.
 
     Attributes:
-        STAT_KEYS (list[str]): Key names of descriptive sample statistics.
-        CRITERIA_SCHEMA (list[tuple[str, str]]): Ordered list of (dist_name, test_code) tuples.
+        STAT_KEYS (tuple[str, ...]): Key names of descriptive sample statistics.
+        CRITERIA_SCHEMA (tuple[tuple[str, str], ...]): Ordered (dist_name, test_code) pairs.
         sample_stats (dict[str, float]): Model statistics from the full descriptive snapshot.
         descriptive_stats (dict[str, float]): Full snapshot retained for presentation.
         candidates_scores (dict[str, dict[str, float]]): Map of GoF test scores per distribution.
     """
 
-    STAT_KEYS = [
+    STAT_KEYS = (
         "sample_size",
         "skew",
         "kurtosis",
         "relative_iqr",
         "entropy",
-    ]
+    )
 
-    CRITERIA_SCHEMA = [(spec.distribution, spec.short_code) for spec in CRITERIA_SPECS]
-    FEATURE_NAMES = STAT_KEYS + [spec.feature_name for spec in CRITERIA_SPECS]
+    CRITERIA_SCHEMA = tuple((spec.distribution, spec.short_code) for spec in CRITERIA_SPECS)
+    FEATURE_NAMES = STAT_KEYS + tuple(spec.feature_name for spec in CRITERIA_SPECS)
     NUMERICALLY_UNSTABLE_TRAINING_FEATURES = _NUMERICALLY_UNSTABLE_TRAINING_FEATURES
     EXCLUDED_TRAINING_FEATURES = _NUMERICALLY_UNSTABLE_TRAINING_FEATURES
-    TRAINING_FEATURE_NAMES = [
-        feature
-        for feature in FEATURE_NAMES
-        if feature not in _NUMERICALLY_UNSTABLE_TRAINING_FEATURES
-    ]
+    TRAINING_FEATURE_NAMES = FEATURE_NAMES
 
     def __init__(self, sample_stats: dict, candidates_scores: dict):
         """Initialize the FeatureVector with sample statistics and GoF scores.
@@ -53,13 +51,13 @@ class FeatureVector:
         self,
         missing_value: float = float("nan"),
         *,
-        feature_names: list[str] | None = None,
+        feature_names: Sequence[str] | None = None,
     ) -> list[float]:
         """Convert aggregated values to a requested model feature schema.
 
         Args:
             missing_value: Fallback for missing or inapplicable values.
-            feature_names: Ordered model schema. Defaults to the current training schema.
+            feature_names: Ordered model schema. Defaults to the full FEATURE_NAMES schema.
 
         Returns:
             Numerical values in the requested schema order.
@@ -78,9 +76,12 @@ class FeatureVector:
         return values
 
     def as_dict(self) -> dict:
-        """Convert feature vector data into a structured dictionary.
+        """Convert feature vector data into independent nested dictionaries.
 
         Returns:
             dict: Map with 'stats' and 'scores' nested dictionaries.
         """
-        return {"stats": self.sample_stats, "scores": self.candidates_scores}
+        return {
+            "stats": dict(self.sample_stats),
+            "scores": {family: dict(scores) for family, scores in self.candidates_scores.items()},
+        }

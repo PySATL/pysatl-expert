@@ -16,11 +16,27 @@ def test_import_does_not_execute_cli(runner):
     assert callable(runner.main)
 
 
-def test_console_entrypoint_discards_report_and_returns_success(runner, monkeypatch):
-    report = object()
-    monkeypatch.setattr(runner, "main", lambda: report)
+def test_console_entrypoint_discards_result_and_returns_success(runner, monkeypatch):
+    result = object()
+    monkeypatch.setattr(runner, "main", lambda: result)
 
     assert runner.entrypoint() == 0
+
+
+def test_console_entrypoint_reports_incompatible_model_without_traceback(
+    runner, monkeypatch, capsys
+):
+    message = "Criterion source revision is not validated for this model"
+
+    def reject():
+        raise runner.ModelCompatibilityError(message)
+
+    monkeypatch.setattr(runner, "main", reject)
+
+    assert runner.entrypoint() == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == f"error: {message}\n"
 
 
 def test_cli_requires_explicit_model_bundle(runner):
@@ -35,6 +51,7 @@ def test_cli_requires_explicit_model_bundle(runner):
     assert args.output == Path("output/report.pdf")
     assert args.pdf_mode == "summary"
     assert args.bootstraps == 0
+    assert args.random_state == 42
 
 
 def test_loads_explicit_single_column_file(runner, tmp_path):
@@ -65,102 +82,60 @@ def test_nonnumeric_input_is_not_silently_removed(runner, tmp_path):
         runner.load_sample(path)
 
 
-def test_main_forwards_settings_and_returns_result(runner, tmp_path, monkeypatch):
+def test_main_passes_canonical_result_and_settings_to_pdf_writer(runner, tmp_path, monkeypatch):
     sample = np.array([0.1, 0.2, 0.3])
     input_path = tmp_path / "sample.csv"
     np.savetxt(input_path, sample)
-    output_path = tmp_path / "report.pdf"
-    report = object()
+    output_path = tmp_path / "nested" / "report.pdf"
+    result = object()
     captured = {}
 
     class Pipeline:
-        def identify_best(self, data, **kwargs):
+        def analyze_catalog(self, values):
+            return None
+
+        def recommend(self, data, **kwargs):
             np.testing.assert_array_equal(data, sample)
-            captured.update(kwargs)
-            return report
+            captured["recommend"] = kwargs
+            return result
 
     def build(**kwargs):
-        captured.update(kwargs)
+        captured["build"] = kwargs
         return Pipeline()
 
-    def pdf(data, result, **kwargs):
-        assert result is report
-        captured.update(kwargs)
+    def write(value, path, options):
+        captured["write"] = (value, path, options)
+        return path
 
     monkeypatch.setattr(runner, "build_pipeline", build)
-    monkeypatch.setattr(runner, "generate_pdf_report", pdf)
+    monkeypatch.setattr(runner, "write_result_pdf", write)
     model_path = tmp_path / "model.joblib"
-    assert (
-        runner.main(
-            [
-                "--input",
-                str(input_path),
-                "--model",
-                str(model_path),
-                "--output",
-                str(output_path),
-                "--bootstraps",
-                "3",
-                "--random-state",
-                "17",
-            ]
-        )
-        is report
-    )
-    assert captured == {
-        "model_path": model_path,
-        "n_bootstraps": 3,
-        "random_state": 17,
-        "output_path": output_path,
-        "mode": "summary",
-    }
-
-
-def test_main_accepts_cli_paths_and_full_report_mode(runner, tmp_path, monkeypatch):
-    sample_path = tmp_path / "input.csv"
-    sample_path.write_text("1\n2\n3\n", encoding="utf-8")
-    output_path = tmp_path / "report.pdf"
-    model_path = tmp_path / "expert.joblib"
-    captured = {}
-
-    class Pipeline:
-        def identify_best(self, data, **kwargs):
-            np.testing.assert_array_equal(data, [1.0, 2.0, 3.0])
-            captured.update(kwargs)
-            return object()
-
-    monkeypatch.setattr(
-        runner,
-        "build_pipeline",
-        lambda **kwargs: captured.update(kwargs) or Pipeline(),
-    )
-    monkeypatch.setattr(
-        runner,
-        "generate_pdf_report",
-        lambda data, report, **kwargs: captured.update(kwargs),
-    )
-
-    runner.main(
+    returned = runner.main(
         [
             "--input",
-            str(sample_path),
+            str(input_path),
             "--model",
             str(model_path),
             "--output",
             str(output_path),
-            "--pdf-mode",
-            "full",
             "--bootstraps",
-            "4",
+            "3",
             "--random-state",
             "17",
+            "--pdf-mode",
+            "full",
         ]
     )
 
-    assert captured == {
-        "model_path": model_path,
-        "n_bootstraps": 4,
-        "random_state": 17,
-        "output_path": output_path,
-        "mode": "full",
-    }
+    assert returned is result
+    assert captured["build"] == {"model_path": model_path}
+    options_passed = captured["recommend"]
+    assert "method" not in options_passed
+    assert options_passed["n_bootstraps"] == 3
+    assert options_passed["random_state"] == 17
+    assert options_passed["analysis_provider"].__name__ == "analyze_catalog"
+    written_result, written_path, options = captured["write"]
+    assert written_result is result
+    assert written_path == output_path
+    assert options.detail == "full"
+    assert output_path.parent.is_dir()

@@ -1,22 +1,23 @@
 import logging
+from collections.abc import Sequence
+from copy import deepcopy
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 from joblib import load as load_model
 
-from pysatl_expert.core.strategy import AbstractStrategy
 from pysatl_expert.models.feature_vector import FeatureVector
 from pysatl_expert.models.hierarchical_model import HierarchicalExpertModel
 from pysatl_expert.models.model_manifest import validate_loaded_model, verify_model_manifest
-from pysatl_expert.models.report import Report
 
 
 logger = logging.getLogger(__name__)
 
 
-class MLStrategy(AbstractStrategy):
+class MLStrategy:
     """Classify raw GoF feature vectors using a pre-trained Random Forest."""
+
+    required_statistics: Sequence[str] = ()
 
     def __init__(self, model_path: str | Path):
         """Load a trusted model and validate its feature schema."""
@@ -25,6 +26,14 @@ class MLStrategy(AbstractStrategy):
             raise FileNotFoundError(f"Model file not found: {p_model}")
 
         manifest = verify_model_manifest(p_model)
+        self._artifact_identity = {
+            "sha256": manifest["model"]["sha256"],
+            "identifier": manifest["model"]["filename"],
+            "feature_schema": {
+                "sha256": manifest["feature_schema"]["sha256"],
+                "names": list(manifest["feature_schema"]["names"]),
+            },
+        }
         self._feature_names = list(manifest["feature_schema"]["names"])
 
         try:
@@ -35,24 +44,13 @@ class MLStrategy(AbstractStrategy):
             logger.error("Failed to load model: %s", exc)
             raise
 
-        model_feature_names = getattr(self.model, "feature_names", None)
-        if model_feature_names != self._feature_names:
-            actual_count = len(model_feature_names) if model_feature_names is not None else 0
-            raise ValueError(
-                "Model feature schema does not match its manifest: "
-                f"expected {len(self._feature_names)}, got {actual_count}"
-            )
-
         self._class_names = sorted(self.model.classes_.tolist())
         logger.info("Model classes: %s", self._class_names)
 
     @property
     def feature_names(self) -> list[str]:
         """Return the exact ordered schema stored with the loaded model."""
-        feature_names = getattr(self, "_feature_names", None)
-        if feature_names is None:
-            feature_names = getattr(self.model, "feature_names", FeatureVector.FEATURE_NAMES)
-        return list(feature_names)
+        return list(self._feature_names)
 
     @property
     def required_features(self) -> frozenset[str]:
@@ -71,107 +69,38 @@ class MLStrategy(AbstractStrategy):
             )
         return frozenset(selected)
 
-    def _hierarchical_evidence(self, X: np.ndarray) -> dict:
-        """Collect actual base-sample forest scores and selected input values."""
-        if not isinstance(self.model, HierarchicalExpertModel):
-            return {}
-        model = self.model
-        frame = pd.DataFrame(X, columns=model.feature_names)
-        stage1_frame = frame[model.stage1_features]
-        stage1_scores = dict(
-            zip(
-                model.stage1_model.classes_,
-                map(float, model.stage1_model.predict_proba(stage1_frame)[0]),
-                strict=True,
-            )
-        )
-        stage2_scores, stage2_features = {}, {}
-        for family, members in model.family_map.items():
-            features = model.stage2_features.get(family, [])
-            stage2_features[family] = frame[features].iloc[0].to_dict()
-            if family in model.stage2_models:
-                forest = model.stage2_models[family]
-                stage2_scores[family] = dict(
-                    zip(
-                        forest.classes_,
-                        map(float, forest.predict_proba(frame[features])[0]),
-                        strict=True,
-                    )
-                )
-            else:
-                stage2_scores[family] = {members[0]: 1.0}
-        return dict(
-            stage1_scores=stage1_scores,
-            stage2_scores=stage2_scores,
-            stage1_features=stage1_frame.iloc[0].to_dict(),
-            stage2_features=stage2_features,
-        )
-
-    def predict_report(
-        self, base_fv: FeatureVector, bootstrap_fvs: list[FeatureVector] | None = None
-    ) -> Report:
-        """Generate a recommendation report from raw statistics and optional resamples."""
-        raw_vector = np.asarray(
-            base_fv.as_flat_list(feature_names=self.feature_names), dtype=np.float64
-        )
-        X = raw_vector.reshape(1, -1)
-
-        probabilities = self.model.predict_proba(X)[0]
-
-        winner_idx = np.argmax(probabilities)
-        winner = self._class_names[winner_idx]
-        base_confidence = float(probabilities[winner_idx])
-
-        final_ranks = {
-            name: float(prob) for name, prob in zip(self._class_names, probabilities, strict=True)
+    def _infer(self, raw_vector: np.ndarray) -> tuple[np.ndarray, dict[str, float], dict]:
+        """Return canonical probabilities and evidence from one model forward pass."""
+        row = raw_vector.reshape(1, -1)
+        if isinstance(self.model, HierarchicalExpertModel):
+            probability_matrix, evidence_rows = self.model._forward_with_evidence(row)
+            probabilities = probability_matrix[0]
+            if evidence_rows is None:
+                raise ValueError("Model forward pass did not return requested evidence")
+            evidence = evidence_rows[0]
+        else:
+            probabilities = self.model.predict_proba(row)[0]
+            evidence = {}
+        scores = {
+            name: float(probability)
+            for name, probability in zip(self._class_names, probabilities, strict=True)
         }
-        confidence_kind = "model_probability"
-        model_ranks = dict(final_ranks)
-        evidence = self._hierarchical_evidence(X)
-        class_name_by_key = {name.lower(): name for name in self._class_names}
-        all_scores: dict[str, dict[str, float]] = {name: {} for name in self._class_names}
-        for vector_idx, feature_name in enumerate(self.feature_names):
-            if "__" not in feature_name:
-                continue
-            dist_name, crit_code = feature_name.split("__", maxsplit=1)
-            class_name = class_name_by_key.get(dist_name)
-            if class_name is None:
-                continue
-            all_scores[class_name][crit_code] = float(raw_vector[vector_idx])
+        return probabilities, scores, evidence
 
-        bootstrap_stability = None
-        bootstrap_ranks = {}
-        bootstrap_successful = 0
-        if bootstrap_fvs:
-            votes = []
-            for fv in bootstrap_fvs:
-                boot_vector = np.asarray(
-                    fv.as_flat_list(feature_names=self.feature_names), dtype=np.float64
-                )
-                X_boot = boot_vector.reshape(1, -1)
-                boot_pred = self.model.predict(X_boot)[0]
-                if boot_pred not in self._class_names:
-                    raise ValueError(f"Bootstrap predicted an unknown class: {boot_pred!r}")
-                votes.append(boot_pred)
-
-            vote_counts = {name: votes.count(name) for name in self._class_names}
-            bootstrap_ranks = {name: count / len(votes) for name, count in vote_counts.items()}
-            bootstrap_stability = bootstrap_ranks[winner]
-            bootstrap_successful = len(votes)
-
-        return Report(
-            distribution_name=winner,
-            confidence=round(base_confidence, 3),
-            all_scores=all_scores,
-            final_ranks=final_ranks,
-            model_ranks=model_ranks,
-            **evidence,
-            confidence_kind=confidence_kind,
-            model_confidence=round(base_confidence, 3),
-            bootstrap_ranks=bootstrap_ranks,
-            bootstrap_successful=bootstrap_successful,
-            bootstrap_stability=(
-                round(bootstrap_stability, 3) if bootstrap_stability is not None else None
-            ),
-            sample_statistics=base_fv.descriptive_stats,
+    def predict(self, sample: np.ndarray, analysis) -> dict:
+        """Return the canonical label and class scores for a catalog analysis."""
+        if not analysis.statistics:
+            raise ValueError("Catalog analysis has no statistic results for RF input")
+        vector = FeatureVector(analysis.sample_stats, analysis.statistics)
+        raw_vector = np.asarray(
+            vector.as_flat_list(feature_names=self.feature_names), dtype=np.float64
         )
+        probabilities, scores, evidence = self._infer(raw_vector)
+        winner = self._class_names[int(np.argmax(probabilities))]
+        artifact = deepcopy(getattr(self, "_artifact_identity", {}))
+        return {
+            "label": winner,
+            "scores": scores,
+            "evidence": evidence,
+            "artifact": artifact,
+        }

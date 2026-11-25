@@ -48,13 +48,27 @@ def test_feature_vector_as_flat_list_length(mock_data):
 
 
 def test_feature_vector_uses_stable_unique_feature_names():
-    assert len(FeatureVector.CRITERIA_SCHEMA) == 146
-    assert len(FeatureVector.FEATURE_NAMES) == 151
+    criterion_names = {
+        f"{distribution}__{criterion}" for distribution, criterion in FeatureVector.CRITERIA_SCHEMA
+    }
+    features_absent_from_criterion = {
+        "uniform__zhang",
+        "gamma__wat",
+        "beta__ent",
+        "beta__mb",
+        "beta__rt",
+        "beta__sk",
+    }
+
+    assert FeatureVector.CRITERIA_SCHEMA == tuple(sorted(FeatureVector.CRITERIA_SCHEMA))
     assert len(FeatureVector.FEATURE_NAMES) == len(set(FeatureVector.FEATURE_NAMES))
+    assert FeatureVector.FEATURE_NAMES[: len(FeatureVector.STAT_KEYS)] == FeatureVector.STAT_KEYS
+    assert set(FeatureVector.FEATURE_NAMES[len(FeatureVector.STAT_KEYS) :]) == criterion_names
     assert "normal__ks" in FeatureVector.FEATURE_NAMES
     assert "beta__ks" in FeatureVector.FEATURE_NAMES
     assert "normal__dap" in FeatureVector.FEATURE_NAMES
     assert "lognormal__kl_int" in FeatureVector.FEATURE_NAMES
+    assert features_absent_from_criterion.isdisjoint(criterion_names)
 
 
 def test_feature_vector_excludes_unstable_criteria_from_the_raw_schema():
@@ -99,14 +113,6 @@ def test_feature_vector_maps_lognormal_scores_to_lognormal_schema():
     assert feature_values["lognormal__ks"] == 0.25
 
 
-def test_feature_vector_as_flat_list_order(mock_data):
-    stats, scores = mock_data
-    fv = FeatureVector(stats, scores)
-    flat = fv.as_flat_list()
-
-    assert flat[0] == 100.0  # sample_size
-
-
 def test_feature_vector_as_flat_list_missing_values():
     fv = FeatureVector({}, {"Normal": {}})
     flat = fv.as_flat_list()
@@ -142,3 +148,37 @@ def test_feature_vector_as_dict(mock_data):
     assert "scores" in d
     assert d["stats"]["sample_size"] == 100
     assert d["scores"]["normal"]["shapiro_wilk"] == 0.95
+
+
+@pytest.mark.parametrize(
+    "schema_name", ["STAT_KEYS", "CRITERIA_SCHEMA", "FEATURE_NAMES", "TRAINING_FEATURE_NAMES"]
+)
+def test_default_schemas_cannot_be_modified_in_place(schema_name):
+    schema = getattr(FeatureVector, schema_name)
+    assert isinstance(schema, tuple)
+    with pytest.raises(TypeError):
+        schema[0] = "changed"
+
+
+def test_exports_and_constructor_inputs_do_not_change_vectors_or_other_instances():
+    stats = {"sample_size": 100, "min": 0.1}
+    scores = {"Normal": {"ks": 0.5}}
+    first = FeatureVector(stats, scores)
+    second = FeatureVector(stats, scores)
+    expected = first.as_flat_list(-1.0)
+
+    exported = first.as_dict()
+    exported["stats"]["sample_size"] = 999
+    exported["scores"]["normal"]["ks"] = 999
+    exported["scores"]["normal"]["new"] = 42
+    stats["sample_size"] = 777
+    stats["min"] = -1
+    scores["Normal"]["ks"] = 777
+
+    assert first.as_flat_list(-1.0) == second.as_flat_list(-1.0) == expected
+    assert first.descriptive_stats == second.descriptive_stats == {"sample_size": 100, "min": 0.1}
+    assert first.as_dict()["scores"] == {"normal": {"ks": 0.5}}
+    first.sample_stats["sample_size"] = 101
+    first.candidates_scores["normal"]["ks"] = 0.6
+    assert first.as_flat_list(feature_names=("normal__ks", "sample_size")) == [0.6, 101.0]
+    assert second.as_flat_list(-1.0) == expected

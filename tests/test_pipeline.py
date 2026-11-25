@@ -1,210 +1,195 @@
-from unittest.mock import MagicMock, patch
+"""Canonical pipeline workflow checks use controlled method/procedure doubles."""
+
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
 
-from pysatl_expert.models.feature_vector import FeatureVector
+from pysatl_expert.core.recommendation import RecommendationMethod
+from pysatl_expert.models.analysis_result import AnalysisResult
 from pysatl_expert.pipeline import DistributionPipeline
 
 
-class TestDistributionPipeline:
-    @pytest.fixture
-    def mock_components(self):
-        components = MagicMock()
+class LabelMethod:
+    required_statistics = ("mean",)
 
-        components.feature_extractor.calculate_sample_stats.return_value = {
-            "min": 0.0,
-            "max": 10.0,
-            "mean": 5.0,
-        }
+    def __init__(self):
+        self.calls = []
 
-        dist1 = MagicMock()
-        dist1.name = "Normal"
-        dist1.support = (-float("inf"), float("inf"))
-        dist1.fit.return_value = (0, 1)
+    def predict(self, sample, analysis):
+        self.calls.append((sample.copy(), analysis.sample_snapshot))
+        label = "low" if float(np.mean(sample)) < 0.2 else "high"
+        return {"label": label, "scores": {label: 1.0}}
 
-        dist2 = MagicMock()
-        dist2.name = "Beta"
-        dist2.support = (0, 1)
 
-        components.distributions = [dist1, dist2]
-
-        criterion = MagicMock()
-        criterion.name = "AIC"
-        criterion.calculate.return_value = 10.5
-        components.criterion_selector.get_applicable_criteria.return_value = [criterion]
-
-        report = MagicMock()
-        report.distribution_name = "Normal"
-        report.parameters = None
-        components.strategy.predict_report.return_value = report
-
-        return components
-
-    def test_pre_validate(self, mock_components):
-        pipeline = DistributionPipeline(mock_components)
-
-        dist_in = MagicMock(support=(0, 10))
-        dist_out_min = MagicMock(support=(1, 10))
-        dist_out_max = MagicMock(support=(0, 9))
-
-        dists = [dist_in, dist_out_min, dist_out_max]
-        valid = pipeline._pre_validate(0, 10, dists)
-
-        assert len(valid) == 1
-        assert valid[0] == dist_in
-
-    @pytest.mark.parametrize(
-        ("data", "message"),
-        [
-            (np.array([]), "non-empty"),
-            (np.array([[1.0, 2.0]]), "one-dimensional"),
-            (np.array([1.0, np.inf]), "finite"),
-            (np.array([2.0, 2.0, 2.0]), "non-constant"),
-        ],
+def make_pipeline():
+    components = SimpleNamespace(
+        feature_extractor=MagicMock(), distributions=[], criterion_selector=None, method=None
     )
-    def test_evaluate_sample_rejects_invalid_input(self, mock_components, data, message):
-        pipeline = DistributionPipeline(mock_components)
+    components.feature_extractor.calculate_sample_stats.side_effect = lambda values: {
+        "sample_size": len(values),
+        "min": float(np.min(values)),
+        "max": float(np.max(values)),
+        "mean": float(np.mean(values)),
+    }
+    return DistributionPipeline(components)
 
-        with pytest.raises(ValueError, match=message):
-            pipeline._evaluate_sample(data)
 
-    def test_evaluate_sample_success(self, mock_components):
-        pipeline = DistributionPipeline(mock_components)
-        data = np.array([10, 0, 5])
+def test_catalog_analysis_keeps_original_order_snapshot():
+    sample = np.array([0.8, 0.2, 0.4])
+    result = make_pipeline().analyze_catalog(sample)
 
-        fv, params = pipeline._evaluate_sample(data)
+    assert result.sample_snapshot == (0.8, 0.2, 0.4)
+    assert result.sample_stats["min"] == 0.2
+    assert result.sample_stats["max"] == 0.8
 
-        assert isinstance(fv, FeatureVector)
-        assert "Normal" in params
-        assert params["Normal"] == (0, 1)
-        assert fv.candidates_scores["normal"]["aic"] == 10.5
-        assert "Beta" not in params
 
-    def test_evaluate_sample_fit_exception(self, mock_components):
-        mock_components.distributions[0].fit.side_effect = Exception("Fit error")
+@pytest.mark.parametrize(
+    "sample, reason",
+    [
+        (np.array([1 + 9j, 2 + 8j, 4 + 7j]), "only real values"),
+        (np.ma.array([1.0, 2.0, 1000.0], mask=[False, False, True]), "masked observations"),
+    ],
+)
+def test_public_analysis_rejects_lossy_input_before_processing(sample, reason):
+    from pysatl_expert.app import analyze_sample
 
-        pipeline = DistributionPipeline(mock_components)
-        data = np.array([1, 2, 3])
+    with pytest.raises(ValueError, match=reason):
+        analyze_sample(sample, distributions=["Normal"], statistics=["normal__ks"])
 
-        fv, params = pipeline._evaluate_sample(data)
 
-        assert "Normal" not in params
-        assert fv.candidates_scores["normal"] == {}
+def test_unmasked_real_array_keeps_all_observations():
+    from pysatl_expert.app import analyze_sample
 
-    def test_evaluate_sample_criterion_exception(self, mock_components):
-        criterion = mock_components.criterion_selector.get_applicable_criteria.return_value[0]
-        criterion.calculate.side_effect = Exception("Calc error")
+    result = analyze_sample(
+        np.ma.array([1.0, 2.0, 4.0], mask=False),
+        distributions=["Normal"],
+        statistics=["normal__ks"],
+    )
+    assert result.sample_snapshot == (1.0, 2.0, 4.0)
+    assert result.sample_stats["mean"] == pytest.approx(7 / 3)
 
-        pipeline = DistributionPipeline(mock_components)
-        data = np.array([1, 2, 3])
 
-        fv, params = pipeline._evaluate_sample(data)
+def test_provider_requires_matching_original_order_snapshot():
+    method = LabelMethod()
+    sample = np.array([0.8, 0.2, 0.4])
+    pipeline = make_pipeline()
 
-        assert "Normal" in params
-        assert "AIC" not in fv.candidates_scores["normal"]
+    result = pipeline.recommend(
+        sample,
+        method=method,
+        procedures={"mean": SimpleNamespace(calculate=lambda values: float(np.mean(values)))},
+        analysis_provider=lambda values: AnalysisResult(
+            {"sample_size": 3}, {}, {}, {}, sample_snapshot=tuple(sorted(values))
+        ),
+    )
 
-    def test_identify_best_with_bootstrap(self, mock_components):
-        pipeline = DistributionPipeline(mock_components)
-        data = np.array([1, 2, 3, 4, 5])
+    assert "snapshot does not match" in result.error
+    assert method.calls == []
 
-        report = pipeline.identify_best(data, n_bootstraps=2)
 
-        assert mock_components.strategy.predict_report.called
-        args, _ = mock_components.strategy.predict_report.call_args
-        assert len(args[1]) == 2
-        assert report.parameters == (0, 1)
+def test_bootstrap_uses_same_method_preserves_primary_and_records_votes(monkeypatch):
+    sample = np.array([0.1, 0.2, 0.3])
+    resamples = iter((np.array([0.1, 0.1, 0.3]), np.array([0.2, 0.3, 0.3])))
+    rng = SimpleNamespace(choice=lambda *_args, **_kwargs: next(resamples))
+    monkeypatch.setattr(np.random, "default_rng", lambda seed: rng)
+    method = LabelMethod()
+    procedure = MagicMock()
+    procedure.calculate.side_effect = lambda values: float(np.mean(values))
 
-    def test_identify_best_no_bootstrap(self, mock_components):
-        pipeline = DistributionPipeline(mock_components)
-        data = np.array([1, 2, 3])
+    result = make_pipeline().recommend(
+        sample,
+        method=method,
+        procedures={"mean": procedure},
+        n_bootstraps=2,
+        random_state=17,
+    )
 
-        report = pipeline.identify_best(data, n_bootstraps=0)
+    assert result.prediction == {"label": "high", "scores": {"high": 1.0}}
+    assert result.diagnostics["bootstrap"] == {
+        "requested": 2,
+        "successful": 2,
+        "vote_counts": {"low": 1, "high": 1},
+        "vote_shares": {"low": 0.5, "high": 0.5},
+        "stability": 0.5,
+        "failures": [],
+    }
+    assert len(method.calls) == 3
+    np.testing.assert_array_equal(method.calls[0][0], sample)
+    assert procedure.calculate.call_count == 3
 
-        args, _ = mock_components.strategy.predict_report.call_args
-        assert len(args[1]) == 0
-        assert report.parameters == (0, 1)
-        assert report.candidate_parameters == {"Normal": (0, 1)}
 
-    def test_identify_best_default_does_not_resample(self, mock_components):
-        pipeline = DistributionPipeline(mock_components)
-        with patch.object(pipeline, "_evaluate_sample", return_value=(MagicMock(), {})) as evaluate:
-            report = pipeline.identify_best(np.array([1, 2, 3]))
-        assert evaluate.call_count == 1
-        assert report.bootstrap_requested == 0
-        assert report.bootstrap_successful == 0
+def test_failed_resamples_are_counted_and_zero_votes_have_no_stability(monkeypatch):
+    sample = np.array([0.1, 0.2, 0.3])
+    rng = SimpleNamespace(choice=lambda *_args, **_kwargs: np.array([0.2, 0.3, 0.4]))
+    monkeypatch.setattr(np.random, "default_rng", lambda seed: rng)
 
-    def test_identify_best_records_partial_and_failed_bootstrap(self, mock_components, caplog):
-        pipeline = DistributionPipeline(mock_components)
-        with patch.object(pipeline, "_evaluate_sample") as evaluate:
-            evaluate.side_effect = [
-                (MagicMock(), {}),
-                (MagicMock(), {}),
-                ValueError("resample failure"),
-            ]
-            report = pipeline.identify_best(np.array([1, 2, 3]), n_bootstraps=2)
-        assert report.bootstrap_requested == 2
-        assert report.bootstrap_successful == 1
-        assert "resample failure" in caplog.text
-        assert report.bootstrap_errors == [
-            "Bootstrap iteration 1 failed: ValueError: resample failure"
-        ]
+    class UnavailableResample(LabelMethod):
+        def predict(self, values, analysis):
+            if float(np.mean(values)) > 0.25:
+                raise RuntimeError("technical stub failure")
+            return super().predict(values, analysis)
 
-    def test_identify_best_params_not_found(self, mock_components):
-        report_mock = MagicMock()
-        report_mock.distribution_name = "unknown_dist"
-        report_mock.parameters = None
-        mock_components.strategy.predict_report.return_value = report_mock
+    result = make_pipeline().recommend(
+        sample,
+        method=UnavailableResample(),
+        procedures={"mean": SimpleNamespace(calculate=lambda values: float(np.mean(values)))},
+        n_bootstraps=2,
+    )
 
-        pipeline = DistributionPipeline(mock_components)
-        data = np.array([1, 2, 3])
+    diagnostics = result.diagnostics["bootstrap"]
+    assert diagnostics["requested"] == 2
+    assert diagnostics["successful"] == 0
+    assert diagnostics["vote_counts"] == {}
+    assert diagnostics["vote_shares"] == {}
+    assert diagnostics["stability"] is None
+    assert len(diagnostics["failures"]) == 2
 
-        report = pipeline.identify_best(data, n_bootstraps=0)
 
-        assert report.parameters is None
+def test_successful_votes_without_primary_label_have_zero_stability(monkeypatch):
+    sample = np.array([0.1, 0.2, 0.3])
+    rng = SimpleNamespace(choice=lambda *_args, **_kwargs: np.array([0.1, 0.1, 0.2]))
+    monkeypatch.setattr(np.random, "default_rng", lambda seed: rng)
+    result = make_pipeline().recommend(
+        sample,
+        method=LabelMethod(),
+        procedures={"mean": SimpleNamespace(calculate=lambda values: float(np.mean(values)))},
+        n_bootstraps=2,
+    )
+    diagnostics = result.diagnostics["bootstrap"]
+    assert diagnostics["successful"] == 2
+    assert diagnostics["vote_counts"] == {"low": 2}
+    assert diagnostics["stability"] == 0.0
 
-    def test_identify_best_bootstrap_exception(self, mock_components):
-        from pysatl_expert.models.report import Report
 
-        mock_components.strategy.predict_report.return_value = Report("Normal", 0.75, {})
-        pipeline = DistributionPipeline(mock_components)
-        data = np.array([1, 2, 3])
+@pytest.mark.parametrize("count", [-1, True, 1.5, "2"])
+def test_bootstrap_count_is_validated_before_method_execution(count):
+    method = LabelMethod()
+    with pytest.raises(ValueError, match="non-negative integer"):
+        make_pipeline().recommend(
+            [0.1, 0.2, 0.3],
+            method=method,
+            procedures={"mean": SimpleNamespace(calculate=lambda values: float(np.mean(values)))},
+            n_bootstraps=count,
+        )
+    assert method.calls == []
 
-        with patch.object(pipeline, "_evaluate_sample") as mocked_eval:
-            mocked_eval.side_effect = [
-                (MagicMock(), {"Normal": (0, 1)}),
-                Exception("Bootstrap iteration failed"),
-            ]
 
-            report = pipeline.identify_best(data, n_bootstraps=1)
+def test_explicit_recommendation_protocol_subclass_can_initialize_requirements():
+    class Ready(RecommendationMethod):
+        def __init__(self):
+            self.required_statistics = ["mean"]
 
-            assert mocked_eval.call_count == 2
-            assert report.distribution_name == "Normal"
-            assert report.bootstrap_requested == 1
-            assert report.bootstrap_successful == 0
-            assert report.bootstrap_stability is None
-            assert report.bootstrap_ranks == {}
+        def predict(self, sample, analysis):
+            return {"label": "ready", "mean": analysis.special_statistics["mean"]}
 
-    def test_identify_best_bootstrap_uses_requested_random_seed(self, mock_components):
-        pipeline = DistributionPipeline(mock_components)
-        data = np.array([1, 2, 3])
+    result = make_pipeline().recommend(
+        np.array([0.1, 0.2, 0.3]),
+        method=Ready(),
+        procedures={"mean": SimpleNamespace(calculate=lambda values: float(np.mean(values)))},
+    )
 
-        with patch("pysatl_expert.pipeline.np.random.default_rng") as rng_factory:
-            rng_factory.return_value.choice.return_value = data
-            pipeline.identify_best(data, n_bootstraps=2, random_state=17)
-
-        rng_factory.assert_called_once_with(17)
-        assert rng_factory.return_value.choice.call_count == 2
-
-    def test_evaluate_sample_no_valid_distributions(self, mock_components):
-        for dist in mock_components.distributions:
-            dist.support = (100, 200)
-
-        pipeline = DistributionPipeline(mock_components)
-        data = np.array([1, 2, 3])
-
-        fv, params = pipeline._evaluate_sample(data)
-
-        assert params == {}
-        assert fv.candidates_scores["normal"] == {}
-        assert fv.candidates_scores["beta"] == {}
+    assert result.error is None
+    assert result.prediction == {"label": "ready", "mean": pytest.approx(0.2)}
+    assert result.analysis.sample_snapshot == (0.1, 0.2, 0.3)

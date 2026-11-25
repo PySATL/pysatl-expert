@@ -16,6 +16,16 @@ _SCIPY_SPECS = {
         (0, 2),
     ),
     "beta": (stats.beta, ("alpha", "beta"), ("a", "b"), (0, 1)),
+    "laplace": (stats.laplace, ("loc", "scale"), ("loc", "scale"), (1,)),
+    "pareto": (stats.pareto, ("shape", "loc", "scale"), ("b", "loc", "scale"), (0, 2)),
+    "loglogistic": (stats.fisk, ("shape", "loc", "scale"), ("c", "loc", "scale"), (0, 2)),
+    "inversegamma": (stats.invgamma, ("shape", "loc", "scale"), ("a", "loc", "scale"), (0, 2)),
+    "exponentiatedweibull": (
+        stats.exponweib,
+        ("exponent", "shape", "loc", "scale"),
+        ("a", "c", "loc", "scale"),
+        (0, 1, 3),
+    ),
 }
 
 
@@ -23,7 +33,10 @@ def _finite_parameters(params: dict, *names: str) -> tuple[float, ...] | None:
     """Return required finite parameters, or None when a fitted curve is unavailable."""
     if not all(name in params for name in names):
         return None
-    values = tuple(float(params[name]) for name in names)
+    try:
+        values = tuple(float(params[name]) for name in names)
+    except (TypeError, ValueError, OverflowError):
+        return None
     return values if all(math.isfinite(value) for value in values) else None
 
 
@@ -34,6 +47,15 @@ def get_scipy_dist(dist_name: str, params: dict):
         values = _finite_parameters(params, "a", "b")
         if values is not None and values[1] > values[0]:
             return stats.uniform(loc=values[0], scale=values[1] - values[0])
+        return None
+    if name == "hyperbolic":
+        values = _finite_parameters(params, "alpha", "beta", "delta", "mu")
+        if values is not None:
+            alpha, beta, delta, mu = values
+            if alpha > 0 and delta > 0 and abs(beta) < alpha:
+                return stats.genhyperbolic(
+                    p=1.0, a=alpha * delta, b=beta * delta, loc=mu, scale=delta
+                )
         return None
 
     spec = _SCIPY_SPECS.get(name)

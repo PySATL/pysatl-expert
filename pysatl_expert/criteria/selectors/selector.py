@@ -1,5 +1,6 @@
 from collections.abc import Collection, Mapping, Sequence
 
+from pysatl_expert.core.criterion import AbstractCriterion
 from pysatl_expert.core.criterion_selector import AbstractCriterionSelector
 from pysatl_expert.criteria.calculate.generic import GenericCriterion
 from pysatl_expert.criteria.catalog import CRITERIA_REGISTRY, CriterionSpec
@@ -33,7 +34,7 @@ class CriterionSelector(AbstractCriterionSelector):
         if missing:
             raise ValueError("Model requires unavailable criterion features: " + ", ".join(missing))
 
-    def get_applicable_criteria(self, _data, distribution) -> list[GenericCriterion]:
+    def get_applicable_criteria(self, _data, distribution) -> list[AbstractCriterion]:
         """Return criterion adapters selected for a candidate distribution."""
         distribution_name = normalize_distribution_name(distribution.name)
         if distribution_name not in self._cache:
@@ -44,6 +45,6 @@ class CriterionSelector(AbstractCriterionSelector):
                 if self.feature_names is None or spec.feature_name in self.feature_names
             )
             self._cache[distribution_name] = tuple(
-                GenericCriterion(spec.statistic_class(), spec.short_code) for spec in selected
+                GenericCriterion(spec.statistic_class, spec.short_code) for spec in selected
             )
         return list(self._cache[distribution_name])

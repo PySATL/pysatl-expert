@@ -58,75 +58,6 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def prepare_training_data(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
-    """Validate and project a raw dataset onto the active training schema.
-
-    Completed datasets may still contain columns that were explicitly excluded after
-    generation.  Those known historical columns are discarded; unknown columns and
-    missing active features remain hard schema errors.
-    """
-    if "Target" not in df.columns:
-        raise ValueError("Dataset has no Target column")
-
-    actual_features = [column for column in df.columns if column != "Target"]
-    expected_features = FeatureVector.FEATURE_NAMES
-    missing_features = sorted(set(expected_features) - set(actual_features))
-    if missing_features:
-        raise ValueError("Dataset is missing active features: " + ", ".join(missing_features))
-    extra_features = set(actual_features) - set(expected_features)
-    unexpected_features = sorted(extra_features - FeatureVector.EXCLUDED_TRAINING_FEATURES)
-    if unexpected_features:
-        raise ValueError("Dataset contains unexpected features: " + ", ".join(unexpected_features))
-
-    features = df[expected_features].replace([np.inf, -np.inf], np.nan)
-    return features, df["Target"]
-
-
-def load_training_dataset(
-    path: Path,
-    samples_per_class: int | None = None,
-    expected_targets: set[str] | None = None,
-    chunksize: int = 50_000,
-) -> pd.DataFrame:
-    """Load only active float32 features, optionally taking a balanced class prefix."""
-    selected_columns = [*FeatureVector.FEATURE_NAMES, "Target"]
-    numeric_dtypes = {feature_name: np.float32 for feature_name in FeatureVector.FEATURE_NAMES}
-    read_options = {
-        "usecols": selected_columns,
-        "dtype": numeric_dtypes,
-    }
-    if samples_per_class is None:
-        return pd.read_csv(path, **read_options)
-
-    selected_parts = []
-    selected_counts: dict[str, int] = {}
-    for chunk in pd.read_csv(path, chunksize=chunksize, **read_options):
-        for target, target_rows in chunk.groupby("Target", sort=False):
-            target_name = str(target)
-            remaining = samples_per_class - selected_counts.get(target_name, 0)
-            if remaining <= 0:
-                continue
-            selected = target_rows.head(remaining)
-            selected_parts.append(selected)
-            selected_counts[target_name] = selected_counts.get(target_name, 0) + len(selected)
-        if expected_targets and all(
-            selected_counts.get(target, 0) >= samples_per_class for target in expected_targets
-        ):
-            break
-
-    required_targets = expected_targets or set(selected_counts)
-    incomplete = {
-        target: selected_counts.get(target, 0)
-        for target in required_targets
-        if selected_counts.get(target, 0) < samples_per_class
-    }
-    if incomplete:
-        raise ValueError(f"Dataset has insufficient smoke rows: {incomplete}")
-    if not selected_parts:
-        raise ValueError("Dataset contains no training rows")
-    return pd.concat(selected_parts, ignore_index=True)[selected_columns]
-
-
 def save_training_artifacts(
     *,
     model_path: Path,
@@ -229,14 +160,14 @@ def main(argv: list[str] | None = None):
     validate_selection_document(
         feature_selection,
         family_map,
-        FeatureVector.FEATURE_NAMES,
+        list(FeatureVector.FEATURE_NAMES),
     )
     dataset_config = feature_selection["dataset"]
     dataset_path = _resolve_path(dataset_config["path"], project_root)
     training, outer_test = load_frozen_training_dataset(dataset_path)
-    X_train = training[FeatureVector.FEATURE_NAMES]
+    X_train = training[list(FeatureVector.FEATURE_NAMES)]
     y_train = training["Target"]
-    X_test = outer_test[FeatureVector.FEATURE_NAMES]
+    X_test = outer_test[list(FeatureVector.FEATURE_NAMES)]
     y_test = outer_test["Target"]
 
     logger.info(f"Dataset split: {len(X_train)} training samples, {len(X_test)} test samples.")

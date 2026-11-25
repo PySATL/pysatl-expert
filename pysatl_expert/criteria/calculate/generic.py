@@ -1,80 +1,79 @@
-import inspect
-import logging
+"""Construct and execute one pysatl-criterion statistic for a distribution."""
+
+from copy import deepcopy
+from dataclasses import replace
+
+import numpy as np
+from pysatl_criterion.statistics.goodness_of_fit.goodness_of_fit_statistic import (
+    AbstractGoodnessOfFitStatistic,
+)
 
 from pysatl_expert.core.criterion import AbstractCriterion
-
-
-logger = logging.getLogger(__name__)
+from pysatl_expert.criteria.adapters.criterion_adapter import CriterionAdapter
+from pysatl_expert.criteria.parameters import (
+    family_parameters_for_statistic,
+    fitted_parameters_for_statistic,
+)
+from pysatl_expert.models.analysis_result import ProcedureResult
 
 
 class GenericCriterion(AbstractCriterion):
-    """Run a pysatl-criterion statistic through the expert-system interface.
+    """Create a fresh Criterion engine from its class for every calculation."""
 
-    The distribution prepares matching observations and engine parameters.
-    This adapter applies those parameters and supplies theoretical CDF values
-    when required by the statistic method signature.
-    """
-
-    PARAM_ALIASES = {
-        "shape": ["a", "s", "c", "k", "df"],
-        "lambda": ["lam"],
-        "mu": ["loc", "mean"],
-        "std": ["scale", "sigma"],
-    }
-
-    def __init__(self, statistic_instance, display_name: str | None = None):
-        """Initialize an adapter for one statistic engine.
-
-        Args:
-            statistic_instance: Concrete statistic instance from pysatl-criterion.
-            display_name: Optional criterion name exposed to the expert system.
-        """
-        name = display_name or statistic_instance.code()
+    def __init__(
+        self,
+        statistic_class: type[AbstractGoodnessOfFitStatistic],
+        display_name: str | None = None,
+    ):
+        if not isinstance(statistic_class, type) or not issubclass(
+            statistic_class, AbstractGoodnessOfFitStatistic
+        ):
+            raise TypeError("GenericCriterion requires a Criterion statistic class")
+        name = display_name or statistic_class.short_code()
         super().__init__(name=name)
-        self.engine = statistic_instance
+        self.statistic_class = statistic_class
 
-    def _set_engine_parameters(self, parameters: dict) -> None:
-        """Apply hypothesis parameters to attributes exposed by the engine."""
-        for parameter_name, parameter_value in parameters.items():
-            potential_targets = [parameter_name] + self.PARAM_ALIASES.get(parameter_name, [])
-            for target in potential_targets:
-                if hasattr(self.engine, target):
-                    setattr(self.engine, target, parameter_value)
-                    break
+    @property
+    def requires_fit(self) -> bool:
+        """Whether this statistic lacks a supported empty family hypothesis."""
+        return family_parameters_for_statistic(self.statistic_class) is None
 
     def calculate(self, data, dist, params) -> float:
-        """Calculate one raw goodness-of-fit statistic.
+        """Return the scalar compatibility view of the structured calculation."""
+        return self.evaluate(data, dist, params).statistic
 
-        Args:
-            data: Sorted one-dimensional empirical sample.
-            dist: Candidate distribution adapter.
-            params: Parameters returned by the distribution's ``fit`` method.
+    def evaluate(self, data, dist, params) -> ProcedureResult:
+        """Return a native family statistic or a fitted raw statistic with identity.
 
-        Returns:
-            The raw statistic value returned by the criterion engine.
-
-        Raises:
-            Exception: Propagates errors raised by parameter conversion, CDF
-                evaluation, or the statistic engine.
+        Family statistics use their explicitly supported empty hypothesis and
+        the original observations. If the selected statistic only supports
+        fixed parameters, Expert's fitted canonical coordinates are supplied
+        for a raw statistic; the Criterion adapter marks the execution as
+        ``fitted`` and refuses simple-null calibration for that value.
         """
-        criterion_rvs, engine_parameters = dist.prepare_criterion_input(data, params)
-        self._set_engine_parameters(engine_parameters)
+        family = dist.name.lower().replace("_", "")
+        parameter_values = family_parameters_for_statistic(self.statistic_class)
+        fitted = parameter_values is None
+        if parameter_values is None:
+            observations, prepared = dist.prepare_criterion_input(data, params)
+            parameter_values = fitted_parameters_for_statistic(
+                self.statistic_class, family, prepared
+            )
+        else:
+            observations = np.asarray(data, dtype=float)
 
-        sig = inspect.signature(self.engine.execute_statistic)
-        params_in_method = sig.parameters
-
-        needs_cdf = "cdf_vals" in params_in_method
-
-        has_kwargs = any(
-            parameter.kind == inspect.Parameter.VAR_KEYWORD
-            for parameter in params_in_method.values()
-        )
-
-        try:
-            if needs_cdf or has_kwargs:
-                cdf_vals = dist.cdf(data, params)
-                return self.engine.execute_statistic(rvs=criterion_rvs, cdf_vals=cdf_vals)
-            return self.engine.execute_statistic(rvs=criterion_rvs)
-        except Exception as error:
-            logger.debug("Error executing %s: %s", self.name, error)
-            raise
+        engine = self.statistic_class(parameter_values)
+        adapter = CriterionAdapter(engine, fitted=fitted)
+        result = adapter.execute_prepared(observations)
+        if fitted:
+            result = replace(
+                result,
+                preprocessing={
+                    "method": (
+                        f"{type(dist).__module__}.{type(dist).__qualname__}"
+                        ".prepare_criterion_input"
+                    ),
+                    "parameters": deepcopy(params),
+                },
+            )
+        return result

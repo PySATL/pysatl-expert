@@ -15,7 +15,7 @@ def load_frozen_training_dataset(
     selected_columns = [*FeatureVector.FEATURE_NAMES, "Target", "Split"]
     numeric_types = dict.fromkeys(FeatureVector.FEATURE_NAMES, np.float32)
     frame = pd.read_csv(path, usecols=selected_columns, dtype=numeric_types)
-    if np.isinf(frame[FeatureVector.FEATURE_NAMES].to_numpy()).any():
+    if np.isinf(frame[list(FeatureVector.FEATURE_NAMES)].to_numpy()).any():
         raise ValueError(f"Infinite features in {path}")
 
     if frame["Split"].isna().any():
@@ -52,7 +52,7 @@ def load_frozen_training_partition(
         dtype=numeric_types,
         chunksize=chunksize,
     ):
-        if np.isinf(frame[FeatureVector.FEATURE_NAMES].to_numpy()).any():
+        if np.isinf(frame[list(FeatureVector.FEATURE_NAMES)].to_numpy()).any():
             raise ValueError(f"Infinite features in {path}")
         if frame["Split"].isna().any():
             raise ValueError("Frozen dataset Split column must not contain missing values")

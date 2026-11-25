@@ -6,8 +6,9 @@ from pathlib import Path
 import numpy as np
 
 from pysatl_expert.app import build_pipeline
-from pysatl_expert.models.report import Report
-from pysatl_expert.reporting.pdf import generate_pdf_report
+from pysatl_expert.models.analysis_result import RecommendationResult
+from pysatl_expert.models.model_manifest import ModelCompatibilityError
+from pysatl_expert.reporting.result_report import ReportOptions, write_result_pdf
 
 
 def _non_negative_int(value: str) -> int:
@@ -49,8 +50,8 @@ def load_sample(
     return values[:, 0]
 
 
-def main(argv: list[str] | None = None) -> Report:
-    """Analyze the sample and save a PDF; return the same result for Python use."""
+def main(argv: list[str] | None = None) -> RecommendationResult:
+    """Analyze the sample canonically, save its PDF and return the result."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     args = build_parser().parse_args(sys.argv[1:] if argv is None else argv)
     if args.output.exists():
@@ -61,17 +62,22 @@ def main(argv: list[str] | None = None) -> Report:
         skip_header_rows=args.skip_header_rows,
     )
     pipeline = build_pipeline(model_path=args.model)
-    identify_options = {
-        "n_bootstraps": args.bootstraps,
-        "random_state": args.random_state,
-    }
-    report = pipeline.identify_best(sample, **identify_options)
+    result = pipeline.recommend(
+        sample,
+        n_bootstraps=args.bootstraps,
+        random_state=args.random_state,
+        analysis_provider=pipeline.analyze_catalog,
+    )
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    generate_pdf_report(sample, report, output_path=args.output, mode=args.pdf_mode)
-    return report
+    write_result_pdf(result, path=args.output, options=ReportOptions(detail=args.pdf_mode))
+    return result
 
 
 def entrypoint() -> int:
-    """Run the installed console command without exposing the Report to ``sys.exit``."""
-    main()
+    """Run the console command without passing its result to ``sys.exit``."""
+    try:
+        main()
+    except ModelCompatibilityError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     return 0

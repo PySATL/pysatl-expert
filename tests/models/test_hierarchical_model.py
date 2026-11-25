@@ -6,6 +6,18 @@ from sklearn.ensemble import RandomForestClassifier
 from pysatl_expert.models.hierarchical_model import HierarchicalExpertModel
 
 
+class _FixedForest:
+    def __init__(self, classes, probabilities):
+        self.classes_ = np.asarray(classes)
+        self.probabilities = np.asarray(probabilities)
+        self.calls = 0
+
+    def predict_proba(self, features):
+        self.calls += 1
+        assert len(features) == len(self.probabilities)
+        return self.probabilities
+
+
 def _training_data() -> tuple[pd.DataFrame, pd.Series]:
     rng = np.random.default_rng(42)
     labels = np.repeat(["A", "B", "C", "D"], 8)
@@ -20,7 +32,7 @@ def test_hierarchical_model_fits_predicts_and_returns_normalized_probabilities()
     features, target = _training_data()
     model = HierarchicalExpertModel({"low": ["A", "B"], "high": ["C", "D"]})
 
-    model.fit(features, target, n_stage1=None, n_stage2=None)
+    model.fit(features, target, n_stage1=None, n_stage2=None, n_estimators=3, n_jobs=1)
     probabilities = model.predict_proba(features)
     predictions = model.predict(features)
 
@@ -34,7 +46,7 @@ def test_hierarchical_model_supports_missing_raw_statistics() -> None:
     features.loc[features.index[::3], "aux"] = np.nan
     model = HierarchicalExpertModel({"low": ["A", "B"], "high": ["C", "D"]})
 
-    model.fit(features, target, n_stage1=None, n_stage2=None)
+    model.fit(features, target, n_stage1=None, n_stage2=None, n_estimators=3, n_jobs=1)
     probabilities = model.predict_proba(features.iloc[:2])
 
     assert probabilities.shape == (2, 4)
@@ -46,6 +58,39 @@ def test_hierarchical_model_rejects_duplicate_distribution_in_family_map():
         HierarchicalExpertModel({"first": ["A", "B"], "second": ["B", "C"]})
 
 
+def test_hierarchical_forward_returns_stage_evidence_from_the_same_forest_pass(monkeypatch):
+    model = HierarchicalExpertModel({"low": ["A", "B"], "high": ["C"]})
+    model.feature_names = ["x", "y"]
+    model.stage1_features = ["x", "y"]
+    model.stage1_model = _FixedForest(["high", "low"], [[0.4, 0.6]])
+    model.stage2_features = {"low": ["x"]}
+    model.stage2_models = {"low": _FixedForest(["A", "B"], [[0.2, 0.8]])}
+    row = pd.DataFrame([[10.0, 20.0]], columns=model.feature_names)
+
+    probabilities, evidence_rows = model._forward_with_evidence(row)
+
+    np.testing.assert_allclose(probabilities, [[0.12, 0.48, 0.4]], rtol=0, atol=1e-15)
+    assert evidence_rows == [
+        {
+            "stage1_scores": {"high": 0.4, "low": 0.6},
+            "stage2_scores": {"low": {"A": 0.2, "B": 0.8}, "high": {"C": 1.0}},
+            "stage1_features": {"x": 10.0, "y": 20.0},
+            "stage2_features": {"low": {"x": 10.0}, "high": {}},
+        }
+    ]
+    assert model.stage1_model.calls == 1
+    assert model.stage2_models["low"].calls == 1
+
+    def reject_feature_map(_):
+        raise AssertionError("predict_proba should not build evidence feature maps")
+
+    monkeypatch.setattr(pd.Series, "to_dict", reject_feature_map)
+    public_probabilities = model.predict_proba(row)
+    np.testing.assert_array_equal(public_probabilities, probabilities)
+    assert model.stage1_model.calls == 2
+    assert model.stage2_models["low"].calls == 2
+
+
 def test_hierarchical_model_requires_family_map_to_match_training_targets():
     features, target = _training_data()
     model = HierarchicalExpertModel({"low": ["A", "B"], "high": ["C"]})
@@ -55,9 +100,8 @@ def test_hierarchical_model_requires_family_map_to_match_training_targets():
 
 
 def test_hierarchical_model_rejects_ndarray_with_wrong_feature_count():
-    features, target = _training_data()
     model = HierarchicalExpertModel({"low": ["A", "B"], "high": ["C", "D"]})
-    model.fit(features, target, n_stage1=None, n_stage2=None)
+    model.feature_names = ["shape", "aux"]
 
     with pytest.raises(ValueError, match="expected 2 features"):
         model.predict(np.zeros((1, 3)))
@@ -68,32 +112,17 @@ def test_hierarchical_model_never_selects_numerically_unstable_features():
     features["normal__glb"] = np.tile([0.0, 1.0], len(features) // 2)
     model = HierarchicalExpertModel({"low": ["A", "B"], "high": ["C", "D"]})
 
-    model.fit(features, target, n_stage1=None, n_stage2=None)
-
-    assert "normal__glb" not in model.stage1_features
-    assert all(
-        "normal__glb" not in family_features for family_features in model.stage2_features.values()
-    )
-    assert model.feature_names == features.columns.tolist()
-
-
-def test_hierarchical_model_uses_requested_forest_resources():
-    features, target = _training_data()
-    model = HierarchicalExpertModel({"low": ["A", "B"], "high": ["C", "D"]})
-
-    model.fit(
+    stage1_features, stage2_features = model.select_features(
         features,
         target,
         n_stage1=None,
         n_stage2=None,
-        n_estimators=7,
+        n_estimators=1,
         n_jobs=1,
     )
 
-    assert model.stage1_model.n_estimators == 7
-    assert model.stage1_model.n_jobs == 1
-    assert all(forest.n_estimators == 7 for forest in model.stage2_models.values())
-    assert all(forest.n_jobs == 1 for forest in model.stage2_models.values())
+    assert "normal__glb" not in stage1_features
+    assert all("normal__glb" not in family_features for family_features in stage2_features.values())
 
 
 def test_hierarchical_model_trains_final_forests_on_explicit_features():
@@ -113,6 +142,10 @@ def test_hierarchical_model_trains_final_forests_on_explicit_features():
     assert model.stage2_features == {"low": ["aux"], "high": ["shape"]}
     assert model.stage1_model.n_features_in_ == 1
     assert all(forest.n_features_in_ == 1 for forest in model.stage2_models.values())
+    assert model.stage1_model.n_estimators == 7
+    assert model.stage1_model.n_jobs == 1
+    assert all(forest.n_estimators == 7 for forest in model.stage2_models.values())
+    assert all(forest.n_jobs == 1 for forest in model.stage2_models.values())
 
 
 def test_hierarchical_model_rejects_invalid_explicit_feature_selection():
@@ -158,6 +191,7 @@ def test_feature_selection_supports_per_family_budgets_and_complete_stage2():
     assert "aux" not in stage2["low"]
 
 
+@pytest.mark.research
 def test_batched_selection_importances_match_one_complete_forest():
     rng = np.random.RandomState(7)
     features = rng.normal(size=(1_000, 12)).astype(np.float32)

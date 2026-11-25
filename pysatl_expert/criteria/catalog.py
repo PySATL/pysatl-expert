@@ -1,31 +1,29 @@
 """Discover and classify goodness-of-fit statistics available to pysatl-expert."""
 
-import inspect
 from dataclasses import dataclass
 
-from pysatl_criterion.distribution.distribution_type import DistributionType
-from pysatl_criterion.statistics import AbstractGoodnessOfFitStatistic
-from pysatl_criterion.statistics.goodness_of_fit.beta import AbstractBetaGofStatistic
-from pysatl_criterion.statistics.goodness_of_fit.exponent import AbstractExponentialityGofStatistic
-from pysatl_criterion.statistics.goodness_of_fit.gamma import AbstractGammaGofStatistic
-from pysatl_criterion.statistics.goodness_of_fit.laplace import AbstractLaplaceGofStatistic
-from pysatl_criterion.statistics.goodness_of_fit.log_normal import AbstractLogNormalGofStatistic
-from pysatl_criterion.statistics.goodness_of_fit.normal import AbstractNormalityGofStatistic
-from pysatl_criterion.statistics.goodness_of_fit.student import AbstractStudentGofStatistic
-from pysatl_criterion.statistics.goodness_of_fit.uniform import AbstractUniformGofStatistic
-from pysatl_criterion.statistics.goodness_of_fit.weibull import AbstractWeibullGofStatistic
-from pysatl_criterion.utils.statistic import get_available_criteria_codes
+from pysatl_criterion import DistributionType
+from pysatl_criterion.statistics.goodness_of_fit.goodness_of_fit_statistic import (
+    AbstractGoodnessOfFitStatistic,
+)
+from pysatl_criterion.utils.statistic import get_available_criteria
 
 
-DISTRIBUTION_BASES: dict[str, tuple[DistributionType, type[AbstractGoodnessOfFitStatistic]]] = {
-    "normal": (DistributionType.NORMAL, AbstractNormalityGofStatistic),
-    "exponential": (DistributionType.EXPONENTIAL, AbstractExponentialityGofStatistic),
-    "weibull": (DistributionType.WEIBULL, AbstractWeibullGofStatistic),
-    "uniform": (DistributionType.UNIFORM, AbstractUniformGofStatistic),
-    "student": (DistributionType.STUDENT, AbstractStudentGofStatistic),
-    "gamma": (DistributionType.GAMMA, AbstractGammaGofStatistic),
-    "beta": (DistributionType.BETA, AbstractBetaGofStatistic),
-    "lognormal": (DistributionType.LOG_NORMAL, AbstractLogNormalGofStatistic),
+DISTRIBUTIONS: dict[str, DistributionType] = {
+    "normal": DistributionType.NORMAL,
+    "exponential": DistributionType.EXPONENTIAL,
+    "weibull": DistributionType.WEIBULL,
+    "uniform": DistributionType.UNIFORM,
+    "student": DistributionType.STUDENT,
+    "gamma": DistributionType.GAMMA,
+    "beta": DistributionType.BETA,
+    "lognormal": DistributionType.LOG_NORMAL,
+    "laplace": DistributionType.LAPLACE,
+    "pareto": DistributionType.PARETO,
+    "loglogistic": DistributionType.LOG_LOGISTIC,
+    "inversegamma": DistributionType.INVERSE_GAMMA,
+    "exponentiatedweibull": DistributionType.EXPONENTIATED_WEIBULL,
+    "hyperbolic": DistributionType.HYPERBOLIC,
 }
 
 GLOBAL_BLACKLIST = {
@@ -100,44 +98,28 @@ class SkippedCriterion:
     reason: str
 
 
-def _all_subclasses(
-    base_class: type[AbstractGoodnessOfFitStatistic],
-) -> set[type[AbstractGoodnessOfFitStatistic]]:
-    subclasses = set(base_class.__subclasses__())
-    for subclass in tuple(subclasses):
-        subclasses.update(_all_subclasses(subclass))
-    return subclasses
-
-
 def _available_classes(
     distribution_type: DistributionType,
-    base_class: type[AbstractGoodnessOfFitStatistic],
 ) -> dict[str, type[AbstractGoodnessOfFitStatistic]]:
-    available_codes = {code.lower() for code in get_available_criteria_codes(distribution_type)}
     resolved: dict[str, type[AbstractGoodnessOfFitStatistic]] = {}
-    classes = sorted(
-        _all_subclasses(base_class),
-        key=lambda statistic_class: (
-            statistic_class.__module__,
-            statistic_class.__qualname__,
-        ),
-    )
-    for statistic_class in classes:
-        if inspect.isabstract(statistic_class):
-            continue
+    for statistic_class in sorted(
+        get_available_criteria(distribution_type),
+        key=lambda item: (item.__module__, item.__qualname__),
+    ):
         short_code = statistic_class.short_code().lower()
-        if short_code in available_codes:
-            resolved.setdefault(short_code, statistic_class)
+        if short_code in resolved:
+            raise ValueError(
+                f"Duplicate Criterion short code {short_code!r} for {distribution_type.name}"
+            )
+        resolved[short_code] = statistic_class
     return resolved
 
 
 def _discover_catalog() -> tuple[list[CriterionSpec], list[SkippedCriterion]]:
     active: list[CriterionSpec] = []
     skipped: list[SkippedCriterion] = []
-    for distribution, (distribution_type, base_class) in DISTRIBUTION_BASES.items():
-        for short_code, statistic_class in sorted(
-            _available_classes(distribution_type, base_class).items()
-        ):
+    for distribution, distribution_type in DISTRIBUTIONS.items():
+        for short_code, statistic_class in sorted(_available_classes(distribution_type).items()):
             feature_name = f"{distribution}__{short_code}"
             reason: str | None
             if short_code in GLOBAL_BLACKLIST:
@@ -160,16 +142,6 @@ def _discover_catalog() -> tuple[list[CriterionSpec], list[SkippedCriterion]]:
                     )
                 )
 
-    laplace_classes = _available_classes(DistributionType.LAPLACE, AbstractLaplaceGofStatistic)
-    skipped.extend(
-        SkippedCriterion(
-            "laplace",
-            short_code,
-            statistic_class.code().upper(),
-            "unsupported_distribution",
-        )
-        for short_code, statistic_class in laplace_classes.items()
-    )
     active.sort(key=lambda item: (item.distribution, item.short_code))
     skipped.sort(key=lambda item: (item.reason, item.distribution, item.short_code))
     return active, skipped
@@ -179,5 +151,5 @@ CRITERIA_SPECS, SKIPPED_CRITERIA = _discover_catalog()
 CRITERIA_SPEC_BY_KEY = {(spec.distribution, spec.short_code): spec for spec in CRITERIA_SPECS}
 CRITERIA_REGISTRY = {
     distribution: tuple(spec for spec in CRITERIA_SPECS if spec.distribution == distribution)
-    for distribution in DISTRIBUTION_BASES
+    for distribution in DISTRIBUTIONS
 }
